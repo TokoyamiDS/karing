@@ -429,7 +429,7 @@ class AutoConfUtils {
     var fmDelays = <String>[];
     if (fm.isNotEmpty) {
       try {
-        final decoded = jsonDecode(Uri.decodeComponent(fm));
+        final decoded = jsonDecode(_safeDecode(fm));
         if (decoded is Map && decoded['tcp'] is List && decoded['tcp'].isNotEmpty) {
           final settings = decoded['tcp'][0]['settings'];
           if (settings is Map) {
@@ -603,6 +603,19 @@ class AutoConfUtils {
     }
   }
 
+  /// Uri.decodeComponent throws on malformed percent sequences — Patt's
+  /// fm= JSON params contain raw % signs. Fall back to the raw value.
+  static String _safeDecode(String value) {
+    if (!value.contains('%')) {
+      return value;
+    }
+    try {
+      return Uri.decodeComponent(value);
+    } catch (_) {
+      return value;
+    }
+  }
+
   static (String, String, String, int, Map<String, String>, String)? _parseUri(
       String raw) {
     final schemeEnd = raw.indexOf('://');
@@ -612,7 +625,7 @@ class AutoConfUtils {
     String remark = "";
     final hashIdx = rest.indexOf('#');
     if (hashIdx >= 0) {
-      remark = Uri.decodeComponent(rest.substring(hashIdx + 1));
+      remark = _safeDecode(rest.substring(hashIdx + 1));
       rest = rest.substring(0, hashIdx);
     }
     Map<String, String> params = {};
@@ -624,17 +637,17 @@ class AutoConfUtils {
         if (pair.isEmpty) continue;
         final eq = pair.indexOf('=');
         if (eq < 0) {
-          params[Uri.decodeComponent(pair)] = '';
+          params[_safeDecode(pair)] = '';
         } else {
-          params[Uri.decodeComponent(pair.substring(0, eq))] =
-              Uri.decodeComponent(pair.substring(eq + 1));
+          params[_safeDecode(pair.substring(0, eq))] =
+              _safeDecode(pair.substring(eq + 1));
         }
       }
     }
     String userinfo = "";
     final at = rest.lastIndexOf('@');
     if (at >= 0) {
-      userinfo = Uri.decodeComponent(rest.substring(0, at));
+      userinfo = _safeDecode(rest.substring(0, at));
       rest = rest.substring(at + 1);
     }
     String host;
