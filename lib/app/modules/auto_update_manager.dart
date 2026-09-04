@@ -102,10 +102,8 @@ class AutoUpdateManager {
   static final AutoUpdateCheckVersion _versionCheck = AutoUpdateCheckVersion();
 
   static bool isSupport() {
-    return Platform.isWindows ||
-        Platform.isAndroid ||
-        Platform.isMacOS ||
-        Platform.isLinux;
+    // personal build: never fetch or replace binaries from official releases
+    return false;
   }
 
   static List<String> updateChannels() {

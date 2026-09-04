@@ -1707,6 +1707,11 @@ class SettingConfig {
 
   String languageTag = "";
   String regionCode = "";
+  /// Iran mode: split domestic traffic direct + block IR ads. Defaults to
+  /// regionCode==ir; can be toggled in Settings → Iran Mode.
+  bool? iranModeOverride;
+  bool get iranMode =>
+      iranModeOverride ?? (regionCode.toLowerCase() == "ir");
   bool novice = false;
 
   SettingConfigItemDev dev = SettingConfigItemDev();
@@ -1758,6 +1763,7 @@ class SettingConfig {
   Map<String, dynamic> toJson() => {
     'language_tag': languageTag,
     'region_code': regionCode,
+    if (iranModeOverride != null) 'iran_mode_override': iranModeOverride,
     'novice': novice,
     'ui': ui,
     'dev': dev,
@@ -1809,6 +1815,8 @@ class SettingConfig {
 
     languageTag = map["language_tag"] ?? "";
     regionCode = map["region_code"] ?? "";
+    final iranOverride = map["iran_mode_override"];
+    iranModeOverride = iranOverride is bool ? iranOverride : null;
     novice = map["novice"] ?? false;
 
     ui = SettingConfigItemUI.fromJsonStatic(map["ui"]);
@@ -2017,7 +2025,7 @@ class SettingManager {
         _config.tun.enable = true;
       }
     }
-    if (_config.regionCode.toLowerCase() == "ir") {
+    if (_config.iranMode) {
       _config.dns.migrateDnsForIr();
     }
 

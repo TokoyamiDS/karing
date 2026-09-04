@@ -406,6 +406,18 @@ class SingboxConfigBuilder {
     tls.fragment = tlsSetting.enableFragment;
     tls.recordFragment = tlsSetting.enableFragment;
     tls.insecure = tls.insecure || tlsSetting.enableInsecure;
+    if (tlsSetting.enableFragment) {
+      tls.fragmentSizes = tlsSetting.fragmentSize
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      tls.fragmentDelays = tlsSetting.fragmentSleep
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
     return tls;
   }
 
@@ -783,7 +795,7 @@ class SingboxConfigBuilder {
 
     // Iran mode: domestic traffic direct, Iranian ads blocked. Runs before
     // user diversion groups so users can override per rule.
-    if (setting.regionCode.toLowerCase() == "ir") {
+    if (setting.iranMode) {
       ruleSets.add(_buildInRuleSet("geosite", "category-ads-ir"));
       ruleSets.add(_buildInRuleSet("geoip", "ir"));
       ruleSets.add(_buildInRuleSet("geosite", "ir"));

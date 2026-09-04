@@ -613,6 +613,8 @@ class SingboxOutboundTLSOptions {
   bool fragment = false;
   String fragmentFallbackDelay = "";
   bool recordFragment = false;
+  List<String> fragmentSizes = [];
+  List<String> fragmentDelays = [];
   SingboxOutboundUTLSOptions? utls;
   SingboxOutboundRealityOptions? reality;
 
@@ -640,6 +642,8 @@ class SingboxOutboundTLSOptions {
       out['fragment_fallback_delay'] = fragmentFallbackDelay;
     }
     if (recordFragment) out['record_fragment'] = true;
+    if (fragmentSizes.isNotEmpty) out['fragment_sizes'] = fragmentSizes;
+    if (fragmentDelays.isNotEmpty) out['fragment_delays'] = fragmentDelays;
     final u = utls?.toJson();
     if (u != null && u.isNotEmpty) out['utls'] = u;
     final r = reality?.toJson();
@@ -666,6 +670,36 @@ class SingboxOutboundTLSOptions {
     fragment = map['fragment'] ?? false;
     fragmentFallbackDelay = map['fragment_fallback_delay'] ?? "";
     recordFragment = map['record_fragment'] ?? false;
+    if (map['fragment_sizes'] is List) {
+      fragmentSizes = List<String>.from(
+          map['fragment_sizes'].map((e) => e.toString()));
+    }
+    if (map['fragment_delays'] is List) {
+      fragmentDelays = List<String>.from(
+          map['fragment_delays'].map((e) => e.toString()));
+    }
+    if (map['finalmask'] is Map) {
+      // PattN finalmask JSON: extract tcp fragment lengths/delays
+      try {
+        final fm = map['finalmask'];
+        final tcpList = fm['tcp'];
+        if (tcpList is List && tcpList.isNotEmpty) {
+          final settings = tcpList[0]['settings'];
+          if (settings is Map) {
+            final lengths = settings['lengths'];
+            if (lengths is List && fragmentSizes.isEmpty) {
+              fragmentSizes =
+                  List<String>.from(lengths.map((e) => e.toString()));
+            }
+            final delays = settings['delays'];
+            if (delays is List && fragmentDelays.isEmpty) {
+              fragmentDelays =
+                  List<String>.from(delays.map((e) => e.toString()));
+            }
+          }
+        }
+      } catch (_) {}
+    }
     if (map['utls'] is Map) {
       utls = SingboxOutboundUTLSOptions()..fromJson(map['utls']);
     }

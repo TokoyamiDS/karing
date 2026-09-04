@@ -720,6 +720,19 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
               },
             ),
           ),
+          GroupItemOptions(
+            switchOptions: GroupItemSwitchOptions(
+              name: "Iran Mode",
+              tips: "Domestic (.ir / Iranian IPs) traffic goes direct, "
+                  "Iranian ads blocked. Foreign traffic via proxy.",
+              switchValue: settingConfig.iranMode,
+              onSwitch: (bool value) async {
+                settingConfig.iranModeOverride = value;
+                SettingManager.setDirty(true);
+                setState(() {});
+              },
+            ),
+          ),
           if (!settingConfig.novice) ...[
             GroupItemOptions(
               pushOptions: GroupItemPushOptions(

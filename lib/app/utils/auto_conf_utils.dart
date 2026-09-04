@@ -423,19 +423,39 @@ class AutoConfUtils {
       tls['ech'] = {'enabled': true, 'config': params['ech']};
     }
     // PattN/karing share links: fm= carries a finalmask JSON (per-node TLS
-    // fragmentation tuning). Stored for forward compatibility; this fork's
-    // fragment implementation only supports the boolean toggles.
+    // fragmentation tuning) — lengths/delays override global settings.
     final fm = params['fm'] ?? '';
+    var fmSizes = <String>[];
+    var fmDelays = <String>[];
     if (fm.isNotEmpty) {
       try {
-        tls['finalmask'] = jsonDecode(Uri.decodeComponent(fm));
+        final decoded = jsonDecode(Uri.decodeComponent(fm));
+        if (decoded is Map && decoded['tcp'] is List && decoded['tcp'].isNotEmpty) {
+          final settings = decoded['tcp'][0]['settings'];
+          if (settings is Map) {
+            if (settings['lengths'] is List) {
+              fmSizes = List<String>.from(
+                  settings['lengths'].map((e) => e.toString()));
+            }
+            if (settings['delays'] is List) {
+              fmDelays = List<String>.from(
+                  settings['delays'].map((e) => e.toString()));
+            }
+          }
+        }
       } catch (_) {}
     }
     final tlsSetting = SettingManager.getConfig().tls;
     tls['insecure'] =
         (tls['insecure'] == true) || tlsSetting.enableInsecure;
-    tls['fragment'] = tlsSetting.enableFragment;
-    tls['record_fragment'] = tlsSetting.enableFragment;
+    tls['fragment'] = tlsSetting.enableFragment || fmSizes.isNotEmpty;
+    tls['record_fragment'] = tls['fragment'];
+    if (tls['fragment']) {
+      tls['fragment_sizes'] =
+          fmSizes.isNotEmpty ? fmSizes : tlsSetting.fragmentSize.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      tls['fragment_delays'] =
+          fmDelays.isNotEmpty ? fmDelays : tlsSetting.fragmentSleep.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
     return tls;
   }
 
@@ -515,17 +535,29 @@ class AutoConfUtils {
         'alter_id': int.tryParse((json['aid'] ?? '0').toString()) ?? 0,
       };
       if (tlsEnabled) {
-        final tlsSetting = SettingManager.getConfig().tls;
-        out['tls'] = {
-          'enabled': true,
-          'server_name': (json['sni'] ?? "").toString(),
-          'insecure': (json['insecure'] ?? '0').toString() == '1' ||
-              tlsSetting.enableInsecure,
-          if ((json['alpn'] ?? '').toString().isNotEmpty)
-            'alpn': (json['alpn'] ?? "").toString().split(','),
-          'fragment': tlsSetting.enableFragment,
-          'record_fragment': tlsSetting.enableFragment,
-        };
+      final tlsSetting = SettingManager.getConfig().tls;
+      out['tls'] = {
+        'enabled': true,
+        'server_name': (json['sni'] ?? "").toString(),
+        'insecure': (json['insecure'] ?? '0').toString() == '1' ||
+            tlsSetting.enableInsecure,
+        if ((json['alpn'] ?? '').toString().isNotEmpty)
+          'alpn': (json['alpn'] ?? "").toString().split(','),
+        'fragment': tlsSetting.enableFragment,
+        'record_fragment': tlsSetting.enableFragment,
+        if (tlsSetting.enableFragment) ...{
+          'fragment_sizes': tlsSetting.fragmentSize
+              .split(',')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList(),
+          'fragment_delays': tlsSetting.fragmentSleep
+              .split(',')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList(),
+        },
+      };
       }
       final net = (json['net'] ?? '').toString();
       final host = (json['host'] ?? "").toString();
