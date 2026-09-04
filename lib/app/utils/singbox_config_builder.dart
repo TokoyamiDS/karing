@@ -403,20 +403,33 @@ class SingboxConfigBuilder {
         ..shortId = q['sid'] ?? "";
     }
     final tlsSetting = SettingManager.getConfig().tls;
-    tls.fragment = tlsSetting.enableFragment;
-    tls.recordFragment = tlsSetting.enableFragment;
+    final isIr = SettingManager.getConfig().iranMode;
+    tls.fragment = tlsSetting.enableFragment || isIr;
+    tls.recordFragment = tls.fragment;
     tls.insecure = tls.insecure || tlsSetting.enableInsecure;
-    if (tlsSetting.enableFragment) {
-      tls.fragmentSizes = tlsSetting.fragmentSize
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-      tls.fragmentDelays = tlsSetting.fragmentSleep
-          .split(',')
-          .map((e) => e.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
+    if (tls.fragment) {
+      if (isIr) {
+        // Patt's exact fragment+fingerprint preset (t.me/patt_channel_x/91)
+        tls.fragmentSizes = SettingConfigItemTLS.kFragmentSizesPatt;
+        tls.fragmentDelays = SettingConfigItemTLS.kFragmentDelaysPatt;
+        tls.fragmentMaxSplit = SettingConfigItemTLS.kFragmentMaxSplitPatt;
+        tls.cipherSuites =
+            SettingConfigItemTLS.kCipherSuitesPatt.split(':').toList();
+        tls.utls ??= (SingboxOutboundUTLSOptions()
+          ..enabled = true
+          ..fingerprint = 'unsafe' == 'unsafe' ? 'chrome' : 'chrome');
+      } else {
+        tls.fragmentSizes = tlsSetting.fragmentSize
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        tls.fragmentDelays = tlsSetting.fragmentSleep
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
     }
     return tls;
   }
@@ -749,12 +762,39 @@ class SingboxConfigBuilder {
     ];
     final tailTags = tail.map((e) => e['tag'] as String).toSet();
     outbounds.removeWhere((ob) => tailTags.contains(ob['tag']));
-    return [
+    final result = [
       selector,
       urltest,
       ...outbounds,
       ...tail,
     ];
+    _applyPattFragment(result, type);
+    return result;
+  }
+
+  /// Patt's fragment+fingerprint method (t.me/patt_channel_x/91): apply the
+  /// two-stage fragment masks + cipher suites + unsafe fingerprint to every
+  /// TLS-bearing outbound when Iran mode is on.
+  static void _applyPattFragment(List<dynamic> outbounds, SingboxExportType type) {
+    if (!SettingManager.getConfig().iranMode) {
+      return;
+    }
+    for (final ob in outbounds) {
+      if (ob is! Map || ob['tls'] is! Map) {
+        continue;
+      }
+      final tls = ob['tls'] as Map<String, dynamic>;
+      tls['fragment'] = true;
+      tls['record_fragment'] = true;
+      tls['fragment_sizes'] = SettingConfigItemTLS.kFragmentSizesPatt;
+      tls['fragment_delays'] = SettingConfigItemTLS.kFragmentDelaysPatt;
+      tls['fragment_max_split'] = SettingConfigItemTLS.kFragmentMaxSplitPatt;
+      tls['cipher_suites'] = SettingConfigItemTLS.kCipherSuitesPatt.split(':');
+      tls['utls'] = {
+        'enabled': true,
+        'fingerprint': 'chrome',
+      };
+    }
   }
 
   static dynamic route(

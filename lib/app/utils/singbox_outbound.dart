@@ -615,6 +615,7 @@ class SingboxOutboundTLSOptions {
   bool recordFragment = false;
   List<String> fragmentSizes = [];
   List<String> fragmentDelays = [];
+  int fragmentMaxSplit = 0;
   SingboxOutboundUTLSOptions? utls;
   SingboxOutboundRealityOptions? reality;
 
@@ -644,6 +645,7 @@ class SingboxOutboundTLSOptions {
     if (recordFragment) out['record_fragment'] = true;
     if (fragmentSizes.isNotEmpty) out['fragment_sizes'] = fragmentSizes;
     if (fragmentDelays.isNotEmpty) out['fragment_delays'] = fragmentDelays;
+    if (fragmentMaxSplit > 0) out['fragment_max_split'] = fragmentMaxSplit;
     final u = utls?.toJson();
     if (u != null && u.isNotEmpty) out['utls'] = u;
     final r = reality?.toJson();
@@ -678,6 +680,7 @@ class SingboxOutboundTLSOptions {
       fragmentDelays = List<String>.from(
           map['fragment_delays'].map((e) => e.toString()));
     }
+    fragmentMaxSplit = map['fragment_max_split'] ?? 0;
     if (map['finalmask'] is Map) {
       // PattN finalmask JSON: extract tcp fragment lengths/delays
       try {
