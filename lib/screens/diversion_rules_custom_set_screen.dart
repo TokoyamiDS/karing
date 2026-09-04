@@ -245,7 +245,7 @@ class _DiversionRulesCustomSetScreenState
   }
 
   void onTapDone() async {
-    await DiversionCustomRules.importRules(widget.rules);
+    await DiversionCustomRulesHelper.importRulesStatic(widget.rules);
     if (!mounted) {
       return;
     }

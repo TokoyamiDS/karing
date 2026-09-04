@@ -13,7 +13,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   protocol_handler
   screen_capturer_windows
   screen_retriever_windows
-  sentry_flutter
   share_plus
   tray_manager
   url_launcher_windows
@@ -23,7 +22,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   flutter_local_notifications_windows
-  jni
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

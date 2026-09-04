@@ -638,9 +638,7 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
     _netCheckItemRemoteRulesets ??= NetCheckItem();
     _netCheckItemRemoteRulesets!.name = "Rule Set";
 
-    var result = await ClashApi.getRemoteRulesetsCount(
-      SettingManager.getConfig().proxy.controlPort,
-    );
+    var result = await ClashApi.getRemoteRulesetsCount(SettingManager.getConfig().proxy.controlPort);
     if (!mounted) {
       return false;
     }

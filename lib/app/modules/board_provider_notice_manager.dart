@@ -1,3 +1,5 @@
+import 'package:karing/app/utils/board_provider_private.dart';
+import 'package:karing/app/utils/karing_utils.dart' show RawNoticeItem;
 // ignore_for_file: empty_catches, unused_catch_stack
 
 import 'dart:async';

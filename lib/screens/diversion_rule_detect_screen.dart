@@ -421,9 +421,7 @@ class _DiversionRuleDetectScreenState
       _chain.value = "";
     }
 
-    var result = await ClashApi.getRemoteRulesetsCount(
-      setting.proxy.controlPort,
-    );
+    var result = await ClashApi.getRemoteRulesetsCount(setting.proxy.controlPort);
     if (!mounted) {
       return;
     }

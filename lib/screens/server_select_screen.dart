@@ -111,7 +111,7 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
   String _searchText = "";
 
   final Map<String, ProxyConfig> _allOutboundTagMap = {};
-  List<SingboxOutboundUrltest> _urltests = [];
+  List<ProxyConfig> _urltests = [];
   final List<ListViewMultiPartsItem> _listViewParts = [];
   final List<ProxyConfig> _recommend = [];
   Timer? _timer;

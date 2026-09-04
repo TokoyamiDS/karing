@@ -18,6 +18,9 @@ class BuildTimeBuilder implements Builder {
 
 /// Build timestamp - automatically generated at build time
 final DateTime buildDateTime = DateTime(${now.year}, ${now.month}, ${now.day}, ${now.hour}, ${now.minute}, ${now.second});
+
+/// Build version - automatically generated at build time
+const String buildVersion = '1.2.24.2709';
 ''';
 
     final outputId = AssetId(

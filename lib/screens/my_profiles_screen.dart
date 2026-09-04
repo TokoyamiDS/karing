@@ -26,6 +26,7 @@ import 'package:karing/i18n/strings.g.dart';
 import 'package:karing/screens/common_widget.dart';
 import 'package:karing/screens/dialog_utils.dart';
 import 'package:karing/screens/file_view_screen.dart';
+import 'package:karing/screens/extension/singbox_outbound_widgets.dart';
 import 'package:karing/screens/group_helper.dart';
 import 'package:karing/screens/group_item_creator.dart';
 import 'package:karing/screens/group_item_options.dart';
@@ -212,12 +213,12 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
       if (group.groupid == ServerManager.getCustomGroupId()) {
         continue;
       }
-      final provider = group.getBindProvider();
+      final provider = group;
 
       ListViewMultiPartsItem item = ListViewMultiPartsItem();
       item.data = group;
       item.creator = (data, index, bindNO) {
-        return createGroupProfile(provider, group);
+        return createGroupProfile(_ispToBoard(provider.isp), group);
       };
       _listViewParts.add(item);
 
@@ -285,7 +286,7 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
         item.bindNO = count++;
         item.data = servers[i];
         item.creator = (data, index, bindNO) {
-          return createServer(provider, data, bindNO!);
+          return createServer(_ispToBoard(provider.isp), data, bindNO!);
         };
         _listViewParts.add(item);
       }
@@ -1453,7 +1454,7 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
       context,
       tcontext.meta.add,
       SingboxOutboundType.getNames(),
-      SingboxOutboundType.socks.name,
+      SingboxOutboundType.socks,
     );
     if (name == null || name.data == null) {
       return;
@@ -1921,7 +1922,7 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
             textWidthPercent: 0.6,
             onChanged: (String value) {
               if (value.trim().isEmpty) {
-                sbOptions.dialer?.detour = null;
+                sbOptions.dialer?.detour = '';
               } else {
                 sbOptions.dialer?.detour = value.trim();
               }
@@ -1962,4 +1963,13 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
     );
     setState(() {});
   }
+}
+
+BoardProviderConfig _ispToBoard(SubscriptionISP? isp) {
+  final b = BoardProviderConfig();
+  if (isp != null) {
+    b.id = isp.id;
+    b.name = isp.user;
+  }
+  return b;
 }

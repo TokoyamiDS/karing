@@ -86,11 +86,6 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin image_picker_android, io.flutter.plugins.imagepicker.ImagePickerPlugin", e);
     }
     try {
-      flutterEngine.getPlugins().add(new com.github.dart_lang.jni.JniPlugin());
-    } catch (Exception e) {
-      Log.e(TAG, "Error registering plugin jni, com.github.dart_lang.jni.JniPlugin", e);
-    }
-    try {
       flutterEngine.getPlugins().add(new com.sayegh.move_to_background.MoveToBackgroundPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin move_to_background, com.sayegh.move_to_background.MoveToBackgroundPlugin", e);
@@ -131,11 +126,6 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin quick_actions_android, io.flutter.plugins.quickactions.QuickActionsPlugin", e);
     }
     try {
-      flutterEngine.getPlugins().add(new io.sentry.flutter.SentryFlutterPlugin());
-    } catch (Exception e) {
-      Log.e(TAG, "Error registering plugin sentry_flutter, io.sentry.flutter.SentryFlutterPlugin", e);
-    }
-    try {
       flutterEngine.getPlugins().add(new dev.fluttercommunity.plus.share.SharePlusPlugin());
     } catch (Exception e) {
       Log.e(TAG, "Error registering plugin share_plus, dev.fluttercommunity.plus.share.SharePlusPlugin", e);
@@ -146,9 +136,9 @@ public final class GeneratedPluginRegistrant {
       Log.e(TAG, "Error registering plugin url_launcher_android, io.flutter.plugins.urllauncher.UrlLauncherPlugin", e);
     }
     try {
-      flutterEngine.getPlugins().add(new io.nebula.vpn_service.VpnServicePlugin());
+      flutterEngine.getPlugins().add(new com.nebula.vpnservice.VpnServicePlugin());
     } catch (Exception e) {
-      Log.e(TAG, "Error registering plugin vpn_service, io.nebula.vpn_service.VpnServicePlugin", e);
+      Log.e(TAG, "Error registering plugin vpn_service, com.nebula.vpnservice.VpnServicePlugin", e);
     }
   }
 }

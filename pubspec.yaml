@@ -21,7 +21,6 @@ dependencies:
   emoji_regex: 0.0.5
   dash_flags: 0.1.1
   country: 7.0.0
-  sentry_flutter: 9.25.0
   device_info_plus: 11.2.2
   network_info_plus: 7.0.0
   connectivity_plus: 7.3.0
@@ -156,7 +155,6 @@ dependencies:
 dev_dependencies:
   source_gen: 4.2.3
   build_runner: 2.15.0
-  sentry_dart_plugin: 3.4.0
   flutter_launcher_icons: 0.14.4
   flutter_test:
     sdk: flutter
@@ -219,16 +217,6 @@ flutter_launcher_icons: #flutter pub run flutter_launcher_icons
     generate: true
     image_path: logo-round-macos.png
 
-sentry:
-  upload_debug_symbols: false
-  upload_source_maps: false
-  upload_sources: false
-  project:
-  org:
-  auth_token:
-  url:
-  wait_for_processing: false
-  log_level: error # possible values: trace, debug, info, warn, error
   release:
   web_build_path:
   commits: auto

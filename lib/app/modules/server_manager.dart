@@ -1271,12 +1271,16 @@ class ServerManager {
       return ReturnResult(error: ReturnResultError("service stoped"));
     }
     if (data.error != null) {
+      Log.w("testDNSConnectLatency error: ${data.error!.message}");
       return ReturnResult(error: ReturnResultError(data.error!.message));
     }
     try {
       var config = jsonDecode(data.data!.item2);
       DNSQueryResponse response = DNSQueryResponse();
       response.fromJson(config);
+      Log.w(
+        "testDNSConnectLatency tag=${req.tag} latency=${response.latency} err=${response.err ?? 'none'}",
+      );
       if (response.err == null) {
         return ReturnResult(data: response.latency);
       } else {
@@ -1431,8 +1435,8 @@ class ServerManager {
     if (_testingOutboundServerLatency.isEmpty) {
       for (var item in _serverConfig.items) {
         if (item.testLatencyAutoRemove) {
-          bool change = item.removeLatencyError();
-          if (change) {
+          item.removeLatencyError();
+          {
             _latencyUpdatedConfigs.removeWhere(
               (element) => element.groupid == item.groupid,
             );
@@ -1543,7 +1547,7 @@ class ServerManager {
         if (settings.latencyCheckResoveIP) {
           ReturnResult<HttpRequestResponse> httpresult =
               await ClashApi.getHttpRequestByProxy(
-                settings.proxy.controlPort,
+                settings.proxy.mixedRulePort,
                 tag,
                 "https://checkip.amazonaws.com",
               );
@@ -1717,6 +1721,9 @@ class ServerManager {
       remoteContent,
     );
     if (error != null) {
+      Log.w(
+        "ServerManager.loadFrom tryConvert failed: ${error.message}",
+      );
       if (groupid.isNotEmpty) {
         //update error
         ServerConfigGroupItem? exist = getByGroupId(groupid);
@@ -2875,7 +2882,7 @@ class ServerManager {
           zipFileList.add(filePath);
         }
       }
-      var error = await ZipUtils.zip(zipFileList, zipPath);
+      var error = await ZipUtils.zip2(zipFileList, zipPath);
       return error;
     } catch (err) {
       return ReturnResultError(err.toString());
@@ -2893,7 +2900,7 @@ class ServerManager {
       return result;
     }
     var dir = await PathUtils.profileDir();
-    var error = await ZipUtils.unzip(zipPath, dir, whiteList: whiteList);
+    var error = await ZipUtils.unzip2(zipPath, dir, whiteList: whiteList);
     if (error != null) {
       return error;
     }

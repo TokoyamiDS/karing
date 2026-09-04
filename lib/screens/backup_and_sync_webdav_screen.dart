@@ -324,6 +324,7 @@ class _BackupAndSyncWebdavScreenState
             settingConfig.proxy.mixedForwardPort,
           ),
         ];
+      } else if (connectMode == ProxyStrategy.preferProxy) {
         proxyUrls = [
           settingConfig.proxy.getsocksLocalProxyUrl(
             settingConfig.proxy.mixedForwardPort,

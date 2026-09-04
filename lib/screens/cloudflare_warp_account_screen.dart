@@ -251,7 +251,7 @@ class _CloudflareWarpAccountScreenState
       GroupItemOptions(
         textOptions: GroupItemTextOptions(
           name: "Warp+",
-          text: settingConfig.warp.account.warpPlus ? "YES" : "NO",
+          text: settingConfig.warp.account.warpPlus > 0 ? "YES" : "NO",
         ),
       ),
       GroupItemOptions(

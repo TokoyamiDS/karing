@@ -1,3 +1,4 @@
+import 'package:karing/app/utils/board_provider_private.dart';
 import 'dart:convert';
 import 'dart:io';
 

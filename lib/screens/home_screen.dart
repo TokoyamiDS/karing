@@ -726,7 +726,9 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
   }
 
   Future<void> _updateConnections() async {
-    String connections = await FlutterVpnService.clashiApiConnections(false);
+    String connections = await ClashApi.getConnectionsViaHttp(
+      SettingManager.getConfig().proxy.controlPort,
+    );
     Connections con = Connections();
     try {
       var obj = jsonDecode(connections);
@@ -885,12 +887,12 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
   void _updateNetStateLocalNotifications() {
     /*final tcontext = Translations.of(context);
     String title =
-        "${tcontext.netSpeed} ↑ $_trafficUpSpeedNotify ↓ $_trafficDownSpeedNotify";
+        "${tcontext.netSpeed} ط·آ·ط¢آ·ط·آ¢ط¢آ£ط·آ·ط¢آ¢ط·آ¢ط¢آ¢ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¢ط·آ¢ط¢آ ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¹ط·آ¢ط¢آ© $_trafficUpSpeedNotify ط·آ·ط¢آ·ط·آ¢ط¢آ£ط·آ·ط¢آ¢ط·آ¢ط¢آ¢ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¢ط·آ¢ط¢آ ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¥ط£آ¢أ¢â€ڑآ¬ط¥â€œ $_trafficDownSpeedNotify";
 
     String content =
-        "${tcontext.HomeScreen.trafficProxy} ↑ $_trafficUpTotalProxyNotify ↓ $_trafficDownTotalProxyNotify \n";
+        "${tcontext.HomeScreen.trafficProxy} ط·آ·ط¢آ·ط·آ¢ط¢آ£ط·آ·ط¢آ¢ط·آ¢ط¢آ¢ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¢ط·آ¢ط¢آ ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¹ط·آ¢ط¢آ© $_trafficUpTotalProxyNotify ط·آ·ط¢آ·ط·آ¢ط¢آ£ط·آ·ط¢آ¢ط·آ¢ط¢آ¢ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¢ط·آ¢ط¢آ ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¥ط£آ¢أ¢â€ڑآ¬ط¥â€œ $_trafficDownTotalProxyNotify \n";
     content +=
-        "${tcontext.HomeScreen.trafficTotal} ↑ $_trafficUpTotalNotify ↓ $_trafficDownTotalNotify\n";
+        "${tcontext.HomeScreen.trafficTotal} ط·آ·ط¢آ·ط·آ¢ط¢آ£ط·آ·ط¢آ¢ط·آ¢ط¢آ¢ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¢ط·آ¢ط¢آ ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¹ط·آ¢ط¢آ© $_trafficUpTotalNotify ط·آ·ط¢آ·ط·آ¢ط¢آ£ط·آ·ط¢آ¢ط·آ¢ط¢آ¢ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¢ط·آ¢ط¢آ ط·آ·ط¢آ£ط·آ¢ط¢آ¢ط·آ£ط¢آ¢ط£آ¢أ¢â€ڑآ¬ط¹â€کط·آ¢ط¢آ¬ط·آ·ط¢آ¥ط£آ¢أ¢â€ڑآ¬ط¥â€œ $_trafficDownTotalNotify\n";
     LocalNotifications.notifiy(kLocalNotificationsIdNetStateId,
         kLocalNotificationsIdNetState, title, content, "", () => null);*/
   }
@@ -1472,8 +1474,8 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     final tcontext = Translations.of(context);
     String savePath = await PathUtils.serviceCoreConfigFilePath();
     VPNServiceSetServerOptions options = VPNServiceSetServerOptions();
-    options.disabledServerError = tcontext.HomeScreen.disabledServer;
-    options.invalidServerError = tcontext.HomeScreen.invalidServer;
+    options.disabledServerError = tcontext.HomeScreen.disabledServer(p: "");
+    options.invalidServerError = tcontext.HomeScreen.invalidServer(p: "");
     options.expiredServerError = tcontext.HomeScreen.expiredServer;
     ReturnResultError? resultError;
     if (_currentServer.groupid.isEmpty) {
@@ -2162,7 +2164,12 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     }
 
     if (Platform.isWindows) {
-      List<String> filePaths = [PathUtils.serviceExePath()];
+      List<String> filePaths = [
+        path.join(
+          PathUtils.exeDir(),
+          "sing-box.exe",
+        ),
+      ];
       List<String> dirPaths = [PathUtils.flutterAssetsDir()];
       for (var filePath in filePaths) {
         var file = File(filePath);

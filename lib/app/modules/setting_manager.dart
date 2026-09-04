@@ -125,7 +125,7 @@ class SettingConfigItemUI {
   bool excludeFromRecent = false; // android
   bool wakeLock = false; //android
   bool hideVpn =
-      false; //ios https://github.com/seniorbruce721/surge/blob/0a53e57f23445a3e6f4f59b10a4c83eae4378e38/%E7%A5%9E%E6%9C%BApro#L52   Wi-Fi状态下正常生效，数据连接模式下需禁用IPV6 VIF设置才可生效?
+      false; //ios https://github.com/seniorbruce721/surge/blob/0a53e57f23445a3e6f4f59b10a4c83eae4378e38/%E7%A5%9E%E6%9C%BApro#L52   Wi-Fiçٹ¶و€پن¸‹و­£ه¸¸ç”ںو•ˆï¼Œو•°وچ®è؟‍وژ¥و¨،ه¼ڈن¸‹éœ€ç¦پç”¨IPV6 VIFè®¾ç½®و‰چهڈ¯ç”ںو•ˆ?
   bool disableFontScaler = false;
   bool hideAfterLaunch = false;
   String netCheckDomain = "google.com";
@@ -926,6 +926,52 @@ class SettingConfigItemDNS {
     _resolver = dns;
   }
 
+  /// Replaces unreachable-from-Iran CN DNS lists with working ones.
+  /// Runs at every init for regionCode=ir so stale saved lists heal
+  /// themselves (user may have reset settings or restored a backup).
+  static const List<String> kDnsListIr = [
+    "udp://78.157.42.100",
+    "udp://8.8.8.8",
+    "udp://1.1.1.1",
+  ];
+
+  void migrateDnsForIr() {
+    const ir = kDnsListIr;
+    if (_resolver.length != ir.length || !_resolverEveryMatches(ir)) {
+      _resolver = ir.toList();
+    }
+    if (_outbound.length != ir.length || !_outboundEveryMatches(ir)) {
+      _outbound = ir.toList();
+    }
+    if (_direct.length != ir.length || !_directEveryMatches(ir)) {
+      _direct = ir.toList();
+    }
+    if (_proxy.isEmpty || _proxy.first.contains("223.") || _proxy.first.contains("1.12.")) {
+      _proxy = ir.toList();
+    }
+  }
+
+  bool _resolverEveryMatches(List<String> ir) {
+    for (final u in _resolver) {
+      if (!ir.contains(u)) return false;
+    }
+    return true;
+  }
+
+  bool _outboundEveryMatches(List<String> ir) {
+    for (final u in _outbound) {
+      if (!ir.contains(u)) return false;
+    }
+    return true;
+  }
+
+  bool _directEveryMatches(List<String> ir) {
+    for (final u in _direct) {
+      if (!ir.contains(u)) return false;
+    }
+    return true;
+  }
+
   void setOutboundDns(List<String> dns) {
     _outbound = dns;
   }
@@ -975,6 +1021,13 @@ class SettingConfigItemDNS {
       return _updateDns(_outbound, tunMode);
     }
 
+    if (regioncode.toLowerCase() == "ir") {
+      _outbound.add("udp://78.157.42.100");
+      _outbound.add("udp://8.8.8.8");
+      _outbound.add("udp://1.1.1.1");
+      return _updateDns(_outbound, tunMode);
+    }
+
     _outbound.add(SettingConfigItemDNS.kDNSLocal);
     if (!Platform.isAndroid) {
       _outbound.add(SettingConfigItemDNS.kDNSDHCP);
@@ -989,6 +1042,13 @@ class SettingConfigItemDNS {
 
   List<String> getDirectDns(String regioncode, bool tunMode) {
     if (_direct.isNotEmpty) {
+      return _updateDns(_direct, tunMode);
+    }
+
+    if (regioncode.toLowerCase() == "ir") {
+      _direct.add("udp://78.157.42.100");
+      _direct.add("udp://8.8.8.8");
+      _direct.add("udp://1.1.1.1");
       return _updateDns(_direct, tunMode);
     }
 
@@ -1025,6 +1085,11 @@ class SettingConfigItemDNS {
     _resolver.add(SettingConfigItemDNS.kDNSLocal);
     if (!Platform.isAndroid) {
       _resolver.add(SettingConfigItemDNS.kDNSDHCP);
+    }
+    if (regioncode.toLowerCase() == "ir") {
+      _resolver.add("udp://78.157.42.100");
+      _resolver.add("udp://8.8.8.8");
+      return _updateDns(_resolver, tunMode);
     }
     _resolver.add("https://1.1.1.1/dns-query");
     _resolver.add("https://8.8.8.8/dns-query");
@@ -1161,6 +1226,28 @@ class SettingConfigItemProxy {
   static int kMixedForwardPortDefault = 3066;
   static int kMixedPortDefault = 3067;
 
+  /// Dev builds placed next to a "portable" dir run isolated: shifted ports
+  /// avoid clashing with an installed stable Karing (same profile dir there).
+  static bool get devPortable {
+    if (!Platform.isWindows && !Platform.isLinux) {
+      return false;
+    }
+    final exe = File(Platform.resolvedExecutable);
+    final marker = File(
+      "${exe.parent.path}${Platform.pathSeparator}portable${Platform.pathSeparator}.dev",
+    );
+    return marker.existsSync();
+  }
+
+  static int get controlPortDefaultEffective =>
+      devPortable ? controlPortDefault + 100 : controlPortDefault;
+  static int get kMixedPortDefaultEffective =>
+      devPortable ? kMixedPortDefault + 100 : kMixedPortDefault;
+  static int get kMixedDirectPortDefaultEffective =>
+      devPortable ? kMixedDirectPortDefault + 100 : kMixedDirectPortDefault;
+  static int get kMixedForwardPortDefaultEffective =>
+      devPortable ? kMixedForwardPortDefault + 100 : kMixedForwardPortDefault;
+
   static int mixedDirectNetSharePortDefault = 4065;
   static int kMixedForwardNetSharePortDefault = 4066;
   static int kMixedNetSharePortDefault = 4067;
@@ -1170,12 +1257,13 @@ class SettingConfigItemProxy {
   bool enableCluster = false;
   String clusterHost = hostLocal;
   String clusterSecret = "";
-  int mixedRulePort = kMixedPortDefault;
-  int mixedDirectPort = kMixedDirectPortDefault;
-  int mixedForwardPort = kMixedForwardPortDefault;
+  int mixedRulePort = SettingConfigItemProxy.kMixedPortDefaultEffective;
+  int mixedDirectPort = SettingConfigItemProxy.kMixedDirectPortDefaultEffective;
+  int mixedForwardPort =
+      SettingConfigItemProxy.kMixedForwardPortDefaultEffective;
   int mixedRuleNetSharePort = kMixedNetSharePortDefault;
   int mixedForwardNetSharePort = kMixedForwardNetSharePortDefault;
-  int controlPort = controlPortDefault;
+  int controlPort = SettingConfigItemProxy.controlPortDefaultEffective;
   int clusterPort = clusterPortDefault;
   bool autoSetSystemProxy = getAutoSetSystemProxyDefault();
   List<String> systemProxyBypassDomain = ProxyBypassDoaminsDefault.toList();
@@ -1248,14 +1336,22 @@ class SettingConfigItemProxy {
     controlPort = map["control_port"] ?? 0;
     clusterPort = map["cluster_port"] ?? 0;
 
+    // portable dev build: ignore the shared profile's saved ports entirely
+    if (devPortable) {
+      mixedRulePort = 0;
+      mixedDirectPort = 0;
+      mixedForwardPort = 0;
+      controlPort = 0;
+    }
+
     if (mixedRulePort == 0) {
-      mixedRulePort = kMixedPortDefault;
+      mixedRulePort = kMixedPortDefaultEffective;
     }
     if (mixedDirectPort == 0) {
-      mixedDirectPort = kMixedDirectPortDefault;
+      mixedDirectPort = kMixedDirectPortDefaultEffective;
     }
     if (mixedForwardPort == 0) {
-      mixedForwardPort = kMixedForwardPortDefault;
+      mixedForwardPort = kMixedForwardPortDefaultEffective;
     }
     if (mixedRuleNetSharePort == 0) {
       mixedRuleNetSharePort = kMixedNetSharePortDefault;
@@ -1265,7 +1361,7 @@ class SettingConfigItemProxy {
       mixedForwardNetSharePort = kMixedForwardNetSharePortDefault;
     }
     if (controlPort == 0) {
-      controlPort = controlPortDefault;
+      controlPort = controlPortDefaultEffective;
     }
     if (clusterPort == 0) {
       clusterPort = clusterPortDefault;
@@ -1300,7 +1396,7 @@ class SettingConfigItemProxy {
   }
 
   static bool getDisconnectWhenQuitDefault() {
-    if (Platform.isWindows || Platform.isLinux) {
+    if (Platform.isLinux) {
       return true;
     }
     return false;
@@ -1920,6 +2016,9 @@ class SettingManager {
       if (!Platform.isWindows) {
         _config.tun.enable = true;
       }
+    }
+    if (_config.regionCode.toLowerCase() == "ir") {
+      _config.dns.migrateDnsForIr();
     }
 
     bool needSave = await parseConfig();

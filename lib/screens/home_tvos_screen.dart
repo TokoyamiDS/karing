@@ -452,8 +452,8 @@ class _HomeTVOSScreenState extends LasyRenderingState<HomeTVOSScreen>
     String savePath = path.join(await PathUtils.cacheDir(), 'tvos_sync.json');
     await FileUtils.deletePath(savePath);
     VPNServiceSetServerOptions options = VPNServiceSetServerOptions();
-    options.disabledServerError = tcontext.HomeScreen.disabledServer;
-    options.invalidServerError = tcontext.HomeScreen.invalidServer;
+    options.disabledServerError = tcontext.HomeScreen.disabledServer(p: "");
+    options.invalidServerError = tcontext.HomeScreen.invalidServer(p: "");
     options.expiredServerError = tcontext.HomeScreen.expiredServer;
     ReturnResultError? err = await VPNService.setServer(
       VPNService.getCurrent(),

@@ -1199,7 +1199,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   if (err != null) {
                     DialogUtils.showAlertDialog(
                       context,
-                      err,
+                      err.message,
                       showCopy: true,
                       showFAQ: true,
                       withVersion: true,
@@ -2397,8 +2397,10 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                         settings: GroupScreen.routSettings("brutal"),
                         builder: (context) => GroupScreen(
                           title: "brutal",
-                          getOptions:
-                              settingConfig.mux.brutal!.getWidgetOptions,
+                          getOptions: (BuildContext context, SetStateCallback? setstate) async {
+                                return GroupHelperBrutal.brutalWidgetOptions(
+                                    context, settingConfig.mux.brutal!, setstate);
+                              },
                         ),
                       ),
                     );
@@ -2412,20 +2414,20 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
       List<GroupItemOptions> options1 = [
         GroupItemOptions(
           switchOptions: GroupItemSwitchOptions(
-            name: SingboxOutboundType.vmess.name,
+            name: SingboxOutboundType.vmess,
             switchValue: settingConfig.mux.outboundTypes.contains(
-              SingboxOutboundType.vmess.name,
+              SingboxOutboundType.vmess,
             ),
             onSwitch: !settingConfig.mux.enable
                 ? null
                 : (bool value) async {
                     if (value) {
                       settingConfig.mux.outboundTypes.add(
-                        SingboxOutboundType.vmess.name,
+                        SingboxOutboundType.vmess,
                       );
                     } else {
                       settingConfig.mux.outboundTypes.remove(
-                        SingboxOutboundType.vmess.name,
+                        SingboxOutboundType.vmess,
                       );
                     }
                     SettingManager.setDirty(true);
@@ -2435,22 +2437,22 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
         ),
         GroupItemOptions(
           switchOptions: GroupItemSwitchOptions(
-            name: SingboxOutboundType.vless.name,
+            name: SingboxOutboundType.vless,
             tips:
                 "If the node's `flow` is not empty, this does not apply to the node.",
             switchValue: settingConfig.mux.outboundTypes.contains(
-              SingboxOutboundType.vless.name,
+              SingboxOutboundType.vless,
             ),
             onSwitch: !settingConfig.mux.enable
                 ? null
                 : (bool value) async {
                     if (value) {
                       settingConfig.mux.outboundTypes.add(
-                        SingboxOutboundType.vless.name,
+                        SingboxOutboundType.vless,
                       );
                     } else {
                       settingConfig.mux.outboundTypes.remove(
-                        SingboxOutboundType.vless.name,
+                        SingboxOutboundType.vless,
                       );
                     }
                     SettingManager.setDirty(true);
@@ -2460,20 +2462,20 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
         ),
         GroupItemOptions(
           switchOptions: GroupItemSwitchOptions(
-            name: SingboxOutboundType.trojan.name,
+            name: SingboxOutboundType.trojan,
             switchValue: settingConfig.mux.outboundTypes.contains(
-              SingboxOutboundType.trojan.name,
+              SingboxOutboundType.trojan,
             ),
             onSwitch: !settingConfig.mux.enable
                 ? null
                 : (bool value) async {
                     if (value) {
                       settingConfig.mux.outboundTypes.add(
-                        SingboxOutboundType.trojan.name,
+                        SingboxOutboundType.trojan,
                       );
                     } else {
                       settingConfig.mux.outboundTypes.remove(
-                        SingboxOutboundType.trojan.name,
+                        SingboxOutboundType.trojan,
                       );
                     }
                     SettingManager.setDirty(true);
@@ -2483,20 +2485,20 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
         ),
         GroupItemOptions(
           switchOptions: GroupItemSwitchOptions(
-            name: SingboxOutboundType.shadowsocks.name,
+            name: SingboxOutboundType.shadowsocks,
             switchValue: settingConfig.mux.outboundTypes.contains(
-              SingboxOutboundType.shadowsocks.name,
+              SingboxOutboundType.shadowsocks,
             ),
             onSwitch: !settingConfig.mux.enable
                 ? null
                 : (bool value) async {
                     if (value) {
                       settingConfig.mux.outboundTypes.add(
-                        SingboxOutboundType.shadowsocks.name,
+                        SingboxOutboundType.shadowsocks,
                       );
                     } else {
                       settingConfig.mux.outboundTypes.remove(
-                        SingboxOutboundType.shadowsocks.name,
+                        SingboxOutboundType.shadowsocks,
                       );
                     }
                     SettingManager.setDirty(true);
@@ -3071,7 +3073,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   SystemSchemeUtils.getKaringScheme(),
                 );
               } else {
-                error = SystemSchemeUtils.unregister(
+                error = await SystemSchemeUtils.unregister(
                   SystemSchemeUtils.getKaringScheme(),
                 );
               }
@@ -3101,7 +3103,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   SystemSchemeUtils.getClashScheme(),
                 );
               } else {
-                error = SystemSchemeUtils.unregister(
+                error = await SystemSchemeUtils.unregister(
                   SystemSchemeUtils.getClashScheme(),
                 );
               }
@@ -3131,7 +3133,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   SystemSchemeUtils.getSingboxScheme(),
                 );
               } else {
-                error = SystemSchemeUtils.unregister(
+                error = await SystemSchemeUtils.unregister(
                   SystemSchemeUtils.getSingboxScheme(),
                 );
               }

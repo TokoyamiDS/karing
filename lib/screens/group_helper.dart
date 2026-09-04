@@ -24,6 +24,7 @@ import 'package:karing/app/utils/network_utils.dart';
 import 'package:karing/app/utils/path_utils.dart';
 import 'package:karing/app/utils/platform_utils.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
+import 'package:karing/app/utils/singbox_outbound.dart';
 import 'package:karing/app/utils/tag_gen.dart';
 import 'package:karing/app/utils/url_launcher_utils.dart';
 import 'package:karing/app/utils/version_compare_utils.dart';
@@ -2530,7 +2531,7 @@ class GroupHelper {
     if (!context.mounted) {
       return ImportConfirmResult();
     }
-    var result = await ZipUtils.list(zipPath);
+    var result = await ZipUtils.list2(zipPath);
     bool hasISP = false;
     if (result.error == null) {
       hasISP = result.data!.contains(PathUtils.remoteISPConfigFileName());
@@ -3079,7 +3080,7 @@ class GroupHelper {
     String cport = uri.queryParameters['cport'] ?? '';
     String secret = uri.queryParameters['secret'] ?? '';
     String coreVersion = uri.queryParameters['coreversion'] ?? '';
-    int value = VersionCompareUtils.compareVersionWithLength(
+    int value = compareVersionWithLength(
       SettingConfig.kCoreVersion,
       coreVersion,
       2,
@@ -3690,5 +3691,45 @@ class GroupHelper {
         ),
       ),
     );
+  }
+}
+
+class GroupHelperBrutal {
+  static List<GroupItem> brutalWidgetOptions(BuildContext context,
+      SingboxOutboundMultiplexBrutalOptions brutal, SetStateCallback? setstate) {
+    final options = <GroupItemOptions>[];
+    options.add(GroupItemOptions(
+      switchOptions: GroupItemSwitchOptions(
+        name: 'enabled',
+        switchValue: brutal.enabled,
+        onSwitch: (bool value) async {
+          brutal.enabled = value;
+          setstate?.call();
+        },
+      ),
+    ));
+    options.add(GroupItemOptions(
+      textFormFieldOptions: GroupItemTextFieldOptions(
+        name: 'up_mbps',
+        text: brutal.upMbps.toString(),
+        textWidthPercent: 0.6,
+        onChanged: (String value) {
+          brutal.upMbps = int.tryParse(value) ?? 0;
+          setstate?.call();
+        },
+      ),
+    ));
+    options.add(GroupItemOptions(
+      textFormFieldOptions: GroupItemTextFieldOptions(
+        name: 'down_mbps',
+        text: brutal.downMbps.toString(),
+        textWidthPercent: 0.6,
+        onChanged: (String value) {
+          brutal.downMbps = int.tryParse(value) ?? 0;
+          setstate?.call();
+        },
+      ),
+    ));
+    return [GroupItem(options: options)];
   }
 }

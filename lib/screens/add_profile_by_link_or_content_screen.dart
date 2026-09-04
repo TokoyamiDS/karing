@@ -21,6 +21,7 @@ import 'package:karing/screens/group_item_options.dart';
 import 'package:karing/screens/theme_config.dart';
 import 'package:karing/screens/widgets/framework.dart';
 import 'package:karing/screens/widgets/text_field.dart';
+import 'package:karing/app/utils/log.dart';
 import 'package:tuple/tuple.dart';
 
 class AddProfileByLinkOrContentScreen extends LasyRenderingStatefulWidget {
@@ -155,7 +156,7 @@ class _AddProfileByLinkOrContentScreenState
     ReturnResult<String> result = ProxyConfUtils.getUrlFromQRContent(
       _textControllerLink.text.trim(),
     );
-    if (result.data == null) {
+    if (result.data == null || result.data!.isEmpty) {
       return;
     }
     Uri? url = Uri.tryParse(result.data!);
@@ -240,66 +241,74 @@ class _AddProfileByLinkOrContentScreenState
 
   Future<void> onAdd(BuildContext context) async {
     final tcontext = Translations.of(context);
+    Log.w("AddProfile.onAdd begin");
 
     String remark = _textControllerRemark.text.trim();
     String url = _textControllerLink.text.trim();
     ReturnResultError? error = validAddSubscription(context, remark, url);
     if (error != null) {
+      Log.w("AddProfile.onAdd invalid: ${error.message}");
       DialogUtils.showAlertDialog(context, error.message);
       return;
     }
     _loading = true;
     setState(() {});
 
-    error = await ServerManager.addRemoteConfig(
-      "",
-      remark,
-      url,
-      SubscriptionLinkType.unknown,
-      _append,
-      _compatible,
-      _xhwid,
-      _proxyFilter,
-      [],
-      _keepDiversionRules,
-      false,
-      _reloadAfterProfileUpdate,
-      _testLatencyAfterProfileUpdate,
-      _testLatencyAutoRemove,
-      _downloadMode,
-      _remoteContent,
-      _updateTimeInterval,
-      website: _website,
-      ispId: widget.ispId,
-      ispUser: widget.ispUser,
-      decryptPassword: _decryptPassword,
-    );
-    if (error == null) {
-      if (_overrideProxyDns && outboundDns.isNotEmpty) {
-        final uri = Uri.tryParse(url);
-        for (var dns in outboundDns) {
-          if (!SettingConfigItemDNS.containsDNSURL(dns)) {
-            final exists = SettingManager.getConfig().dns.list.any((element) {
-              if (element is Map<String, dynamic>) {
-                final dnsUrl = element[SettingConfigItemDNS.kDNSUrl];
-                if (dnsUrl == dns) {
-                  return true;
+    try {
+      error = await ServerManager.addRemoteConfig(
+        "",
+        remark,
+        url,
+        SubscriptionLinkType.unknown,
+        _append,
+        _compatible,
+        _xhwid,
+        _proxyFilter,
+        [],
+        _keepDiversionRules,
+        false,
+        _reloadAfterProfileUpdate,
+        _testLatencyAfterProfileUpdate,
+        _testLatencyAutoRemove,
+        _downloadMode,
+        _remoteContent,
+        _updateTimeInterval,
+        website: _website,
+        ispId: widget.ispId,
+        ispUser: widget.ispUser,
+        decryptPassword: _decryptPassword,
+      );
+      if (error == null) {
+        if (_overrideProxyDns && outboundDns.isNotEmpty) {
+          final uri = Uri.tryParse(url);
+          for (var dns in outboundDns) {
+            if (!SettingConfigItemDNS.containsDNSURL(dns)) {
+              final exists = SettingManager.getConfig().dns.list.any((element) {
+                if (element is Map<String, dynamic>) {
+                  final dnsUrl = element[SettingConfigItemDNS.kDNSUrl];
+                  if (dnsUrl == dns) {
+                    return true;
+                  }
                 }
-              }
-              return false;
-            });
-            if (!exists) {
-              SettingManager.getConfig().dns.list.add({
-                SettingConfigItemDNS.kDNSIsp: uri?.host ?? "",
-                SettingConfigItemDNS.kDNSUrl: dns,
+                return false;
               });
+              if (!exists) {
+                SettingManager.getConfig().dns.list.add({
+                  SettingConfigItemDNS.kDNSIsp: uri?.host ?? "",
+                  SettingConfigItemDNS.kDNSUrl: dns,
+                });
+              }
             }
           }
+          SettingManager.getConfig().dns.setOutboundDns(outboundDns);
+          SettingManager.setDirty(true);
         }
-        SettingManager.getConfig().dns.setOutboundDns(outboundDns);
-        SettingManager.setDirty(true);
+        ServerManager.setDirty(true);
       }
-      ServerManager.setDirty(true);
+    } catch (err, stacktrace) {
+      Log.w("AddProfile.onAdd exception: $err");
+      Log.w(stacktrace.toString());
+      error = ReturnResultError(err.toString());
     }
     if (!mounted) {
       return;

@@ -12,6 +12,16 @@ analyzer:
     empty_catches: ignore
     unnecessary_overrides: ignore
     unused_catch_stack: ignore
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
+    - refrences/**
+    - tools/**
 include: package:flutter_lints/flutter.yaml
 
 linter:

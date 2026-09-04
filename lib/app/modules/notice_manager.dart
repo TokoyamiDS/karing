@@ -14,7 +14,7 @@ import 'package:karing/app/utils/karing_utils.dart';
 import 'package:karing/app/utils/log.dart';
 import 'package:karing/app/utils/notice_utils.dart';
 import 'package:karing/app/utils/path_utils.dart';
-import 'package:vpn_service/state.dart';
+import 'package:vpn_service/state.dart' show FlutterVpnServiceState;
 
 class NoticeItem {
   bool readed = true;

@@ -32,6 +32,18 @@
         },
         {
             "rule_set_build_in": [
+                "geosite:ir",
+                "geoip:ir",
+                "geoip:iranserver",
+                "geoip:parspack",
+                "geoip:arvancloud"
+            ],
+            "outbound": "direct",
+            "name": "🇮🇷 Iran Direct",
+            "switch": true
+        },
+        {
+            "rule_set_build_in": [
                 "geosite:apple",
                 "geosite:apple@ads",
                 "geosite:apple-dev",
@@ -216,22 +228,6 @@
             "outbound": "currentSelected",
             "name": "🎮 Game",
             "switch": false
-        },
-        {
-            "rule_set_build_in": [
-                "geoip:parspack"
-            ],
-            "outbound": "direct",
-            "name": "☁️ parspack",
-            "switch": true
-        },
-        {
-            "rule_set_build_in": [
-                "geoip:arvancloud"
-            ],
-            "outbound": "direct",
-            "name": "☁️ arvancloud",
-            "switch": true
         }
     ]
 }

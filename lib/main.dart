@@ -167,17 +167,20 @@ Future<void> run(List<String> args) async {
       );
       String cache = await PathUtils.cacheDir();
       if (cache.isEmpty) {
+        Log.w('start failed: cacheDir empty');
         startFailedReason = StartFailedReason.invalidProfile;
         break;
       }
       String version = await AppUtils.getPackgetVersion();
       if (buildVersion != version) {
+        Log.w('start failed: version mismatch build=$buildVersion package=$version');
         startFailedReason = StartFailedReason.invalidVersion;
         break;
       }
       if (PlatformUtils.isPC()) {
         if (path.basename(exePath).toLowerCase() !=
             PathUtils.getExeName().toLowerCase()) {
+          Log.w('start failed: invalid process $exePath');
           startFailedReason = StartFailedReason.invalidProcess;
           break;
         }
