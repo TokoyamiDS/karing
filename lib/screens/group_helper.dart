@@ -42,6 +42,7 @@ import 'package:karing/screens/diversion_rule_detect_screen.dart';
 import 'package:karing/screens/diversion_rules_screen.dart';
 import 'package:karing/screens/dns_auto_setup_screen.dart';
 import 'package:karing/screens/dns_settings_screen.dart';
+import 'package:karing/screens/sni_scanner_screen.dart';
 import 'package:karing/screens/group_item_creator.dart';
 import 'package:karing/screens/group_item_options.dart';
 import 'package:karing/screens/group_screen.dart';
@@ -3531,6 +3532,22 @@ class GroupHelper {
                   .where((e) => e.isNotEmpty)
                   .toList();
               SettingManager.setDirty(true);
+            },
+          ),
+        ),
+        GroupItemOptions(
+          pushOptions: GroupItemPushOptions(
+            name: "SNI Scanner",
+            tips: "Probe (clean IP × fake SNI) pairs with a real TLS "
+                "handshake and apply the fastest working pair.",
+            onPush: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  settings: SniScannerScreen.routSettings(),
+                  builder: (context) => const SniScannerScreen(),
+                ),
+              );
             },
           ),
         ),
