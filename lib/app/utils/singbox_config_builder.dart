@@ -822,6 +822,9 @@ class SingboxConfigBuilder {
           .sniSpoofingIps[_sniSpoofingIpIndex++ % tlsSetting.sniSpoofingIps.length];
       ob['server'] = ip;
       tls['server_name'] = tlsSetting.sniSpoofingFakeSni;
+      // the presented cert can never match the fake SNI — skip verification
+      // (this is inherent to the method; PattNG does the same)
+      tls['insecure'] = true;
       // ensure the real domain survives in the transport Host header
       final tr = ob['transport'];
       if (tr is Map) {
