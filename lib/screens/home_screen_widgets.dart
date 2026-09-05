@@ -498,6 +498,8 @@ class HomeWidgetOptions {
 
   HomeWidgetSwitchOptions? tun;
   HomeWidgetSwitchOptions? systemProxy;
+  HomeWidgetSwitchOptions? sniSpoofing;
+  HomeWidgetSwitchOptions? serverless;
 
   HomeWidgetCard0Options? myProfiles;
   HomeWidgetCard0Options? addProfile;
@@ -528,6 +530,8 @@ class HomeWidgetOptions {
     this.outboundMode,
     this.tun,
     this.systemProxy,
+    this.sniSpoofing,
+    this.serverless,
     this.myProfiles,
     this.addProfile,
     this.perapp,
@@ -556,6 +560,8 @@ class HomeWidgetOptions {
     focusToKeys[outboundMode?.focusNode] = outboundMode?.key;
     focusToKeys[tun?.focusNode] = tun?.key;
     focusToKeys[systemProxy?.focusNode] = systemProxy?.key;
+    focusToKeys[sniSpoofing?.focusNode] = sniSpoofing?.key;
+    focusToKeys[serverless?.focusNode] = serverless?.key;
     focusToKeys[myProfiles?.focusNode] = myProfiles?.key;
     focusToKeys[addProfile?.focusNode] = addProfile?.key;
     focusToKeys[perapp?.focusNode] = perapp?.key;
@@ -1077,6 +1083,103 @@ class _TunSwitchCardState extends FutureSwitchCardState<TunCard> {
     super.dispose();
   }
 }
+
+class SniSpoofingCard extends FutureSwitchCard {
+  SniSpoofingCard({
+    super.key,
+    this.onAfterPressed,
+    this.onValueChanged,
+    super.focusNode,
+  }) : super(
+         icon: Icons.enhanced_encryption_outlined,
+         title: "SNI Spoofing",
+         text: t.meta.enable,
+         getEnable: SniSpoofingCard.getEnabled,
+         onPressed: (context) async {
+           await GroupHelper.showSniSpoofing(context, "home");
+           onAfterPressed?.call();
+         },
+         onChanged: (context, value) async {
+           SettingManager.getConfig().tls.enableSniSpoofing = value;
+           if (value) {
+             SettingManager.getConfig().tls.enableServerless = false;
+           }
+           SettingManager.setDirty(true);
+           SettingManager.save();
+           onValueChanged?.call(value);
+         },
+       );
+  final Function()? onAfterPressed;
+  final Function(bool value)? onValueChanged;
+
+  @override
+  State<SniSpoofingCard> createState() => _SniSpoofingCardState();
+
+  static Future<bool> getEnabled() async {
+    return SettingManager.getConfig().tls.enableSniSpoofing;
+  }
+
+  static bool supportedCurrentPlatfrom() {
+    return true;
+  }
+
+  static String id() {
+    return "sni_spoofing";
+  }
+
+  static int crossAxisCellCount() {
+    return 4;
+  }
+}
+
+class _SniSpoofingCardState extends FutureSwitchCardState<SniSpoofingCard> {}
+
+class ServerlessCard extends FutureSwitchCard {
+  ServerlessCard({
+    super.key,
+    this.onAfterPressed,
+    this.onValueChanged,
+    super.focusNode,
+  }) : super(
+         icon: Icons.bolt_outlined,
+         title: "Serverless",
+         text: t.meta.enable,
+         getEnable: ServerlessCard.getEnabled,
+         onPressed: null,
+         onChanged: (context, value) async {
+           SettingManager.getConfig().tls.enableServerless = value;
+           if (value) {
+             SettingManager.getConfig().tls.enableSniSpoofing = false;
+           }
+           SettingManager.setDirty(true);
+           SettingManager.save();
+           onValueChanged?.call(value);
+         },
+       );
+  final Function()? onAfterPressed;
+  final Function(bool value)? onValueChanged;
+
+  @override
+  State<ServerlessCard> createState() => _ServerlessCardState();
+
+  static Future<bool> getEnabled() async {
+    return SettingManager.getConfig().tls.enableServerless;
+  }
+
+  static bool supportedCurrentPlatfrom() {
+    return true;
+  }
+
+  static String id() {
+    return "serverless";
+  }
+
+  static int crossAxisCellCount() {
+    return 4;
+  }
+}
+
+class _ServerlessCardState extends FutureSwitchCardState<ServerlessCard> {}
 
 class SystemProxyCard extends FutureSwitchCard {
   SystemProxyCard({
@@ -1920,6 +2023,12 @@ class HomeWidgets {
     if (SystemProxyCard.supportedCurrentPlatfrom()) {
       ids.add(SystemProxyCard.id());
     }
+    if (SniSpoofingCard.supportedCurrentPlatfrom()) {
+      ids.add(SniSpoofingCard.id());
+    }
+    if (ServerlessCard.supportedCurrentPlatfrom()) {
+      ids.add(ServerlessCard.id());
+    }
     if (MyProfilesCard.supportedCurrentPlatfrom()) {
       ids.add(MyProfilesCard.id());
     }
@@ -2004,6 +2113,12 @@ class HomeWidgets {
     if (SystemProxyCard.id() == id) {
       return Icons.shuffle;
     }
+    if (SniSpoofingCard.id() == id) {
+      return Icons.enhanced_encryption_outlined;
+    }
+    if (ServerlessCard.id() == id) {
+      return Icons.bolt_outlined;
+    }
     if (MyProfilesCard.id() == id) {
       return Icons.list_alt_outlined;
     }
@@ -2087,6 +2202,12 @@ class HomeWidgets {
     }
     if (SystemProxyCard.id() == id) {
       return t.meta.systemProxy;
+    }
+    if (SniSpoofingCard.id() == id) {
+      return "SNI Spoofing";
+    }
+    if (ServerlessCard.id() == id) {
+      return "Serverless";
     }
     if (MyProfilesCard.id() == id) {
       return t.meta.myProfiles;
@@ -2405,6 +2526,34 @@ class HomeWidgets {
           onAfterPressed: options.systemProxy!.onAfterPressed,
           onValueChanged: options.systemProxy!.onChanged,
           focusNode: options.systemProxy!.focusNode,
+        ),
+      );
+    }
+    if (SniSpoofingCard.id() == id &&
+        options.sniSpoofing != null &&
+        SniSpoofingCard.supportedCurrentPlatfrom()) {
+      return GridItem(
+        crossAxisCellCount: SniSpoofingCard.crossAxisCellCount(),
+        id: id,
+        child: SniSpoofingCard(
+          key: options.sniSpoofing!.key,
+          onAfterPressed: options.sniSpoofing!.onAfterPressed,
+          onValueChanged: options.sniSpoofing!.onChanged,
+          focusNode: options.sniSpoofing!.focusNode,
+        ),
+      );
+    }
+    if (ServerlessCard.id() == id &&
+        options.serverless != null &&
+        ServerlessCard.supportedCurrentPlatfrom()) {
+      return GridItem(
+        crossAxisCellCount: ServerlessCard.crossAxisCellCount(),
+        id: id,
+        child: ServerlessCard(
+          key: options.serverless!.key,
+          onAfterPressed: options.serverless!.onAfterPressed,
+          onValueChanged: options.serverless!.onChanged,
+          focusNode: options.serverless!.focusNode,
         ),
       );
     }

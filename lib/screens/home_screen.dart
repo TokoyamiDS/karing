@@ -169,6 +169,12 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
   final FocusNode _focusNodeSystemProxy = FocusNode(
     debugLabel: "scroll.${SystemProxyCard.id()}",
   );
+  final FocusNode _focusNodeSniSpoofing = FocusNode(
+    debugLabel: "scroll.${SniSpoofingCard.id()}",
+  );
+  final FocusNode _focusNodeServerless = FocusNode(
+    debugLabel: "scroll.${ServerlessCard.id()}",
+  );
   final FocusNode _focusNodeMyProfiles = FocusNode(
     debugLabel: "scroll.${MyProfilesCard.id()}",
   );
@@ -328,6 +334,14 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
           showSheetWidgets(context: context, widgets: widgets);
         }
       }, _focusNodeSystemProxy),
+      sniSpoofing: HomeWidgetSwitchOptions((value) async {
+        await checkAndReload("sni_spoofing_widget");
+        setState(() {});
+      }, null, _focusNodeSniSpoofing),
+      serverless: HomeWidgetSwitchOptions((value) async {
+        await checkAndReload("serverless_widget");
+        setState(() {});
+      }, null, _focusNodeServerless),
       myProfiles: HomeWidgetCard0Options(
         onTapMyProfiles,
         null,
