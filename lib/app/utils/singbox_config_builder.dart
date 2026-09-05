@@ -769,7 +769,62 @@ class SingboxConfigBuilder {
       ...tail,
     ];
     _applyPattFragment(result, type);
+    _applySniSpoofing(result);
     return result;
+  }
+
+  /// SNI-Spoofing (patterniha/SNI-Spoofing): for TLS outbounds, dial a clean
+  /// Cloudflare IP instead of the (possibly poisoned) domain, present a
+  /// whitelisted fake SNI, and keep the real domain in the ws/grpc Host
+  /// header so the CDN still routes to the worker.
+  static int _sniSpoofingIpIndex = 0;
+
+  static void _applySniSpoofing(List<dynamic> outbounds) {
+    final tlsSetting = SettingManager.getConfig().tls;
+    if (!tlsSetting.enableSniSpoofing ||
+        tlsSetting.sniSpoofingIps.isEmpty ||
+        tlsSetting.sniSpoofingFakeSni.isEmpty) {
+      return;
+    }
+    for (final ob in outbounds) {
+      if (ob is! Map || ob['tls'] is! Map) {
+        continue;
+      }
+      final tls = ob['tls'] as Map<String, dynamic>;
+      if (tls['enabled'] != true || tls['reality'] != null) {
+        continue;
+      }
+      final server = ob['server']?.toString() ?? "";
+      if (server.isEmpty || _isIpLiteral(server)) {
+        continue;
+      }
+      // rotate through the clean IPs
+      final ip = tlsSetting
+          .sniSpoofingIps[_sniSpoofingIpIndex++ % tlsSetting.sniSpoofingIps.length];
+      ob['server'] = ip;
+      tls['server_name'] = tlsSetting.sniSpoofingFakeSni;
+      // ensure the real domain survives in the transport Host header
+      final tr = ob['transport'];
+      if (tr is Map) {
+        final headers = tr['headers'];
+        if (headers is Map) {
+          if (!headers.values.any(
+              (v) => v.toString().toLowerCase() == server.toLowerCase())) {
+            headers['Host'] = server;
+          }
+        } else if (tr['host'] == null || tr['host'].toString().isEmpty) {
+          tr['host'] = server;
+        }
+      } else {
+        // raw tls/grpc without transport: server_name must stay the real
+        // domain for routing, spoofing only applies to cdn-backed ws/grpc
+      }
+    }
+  }
+
+  static bool _isIpLiteral(String host) {
+    return RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(host) ||
+        host.contains(':') && !host.contains('.');
   }
 
   /// Patt's fragment+fingerprint method (t.me/patt_channel_x/91): apply the
@@ -916,6 +971,71 @@ class SingboxConfigBuilder {
       'final': kOutboundTagProxy,
       'auto_detect_interface': true,
     };
+    // Serverless mode (patterniha/Serverless-for-Iran): sniffed TLS and
+    // port-443 TCP go through a fragmenting direct outbound, QUIC is blocked
+    // to force TCP, ir/private stay direct, and UDP gets noise. The final
+    // outbound becomes the fragment/direct chain instead of the proxy.
+    final tlsSetting0 = setting.tls;
+    if (tlsSetting0.enableServerless) {
+      final lowDelay = tlsSetting0.serverlessLowDelay;
+      allOutBounds.add({
+        'type': 'direct',
+        'tag': 'tcp-fragment-tls',
+        'finalmask': {
+          'tcp_split': true,
+          'packets': 'tlshello',
+          'lengths': lowDelay ? ["5", "1"] : ["5", "94", "1"],
+          'delays': lowDelay ? ["0"] : ["0", "1"],
+          'max_split': 522,
+        },
+      });
+      allOutBounds.add({
+        'type': 'direct',
+        'tag': 'tcp-fragment',
+        'finalmask': {
+          'tcp_split': true,
+          'packets': '1-1',
+          'lengths': ["1"],
+          'delays': ["1"],
+          'max_split': 419,
+        },
+      });
+      allOutBounds.add({
+        'type': 'direct',
+        'tag': 'udp-noises',
+        'finalmask': {
+          'udp_noise': true,
+          'noise_rand': '1200-1230',
+          'noise_delay': '10',
+          'noise_reset': 28,
+        },
+      });
+      rules.add({
+        'protocol': ['tls'],
+        'network': 'tcp',
+        'outbound': 'tcp-fragment-tls',
+      });
+      rules.add({
+        'port': [443],
+        'network': 'tcp',
+        'outbound': 'tcp-fragment-tls',
+      });
+      rules.add({
+        'protocol': ['quic'],
+        'network': 'udp',
+        'outbound': kOutboundTagBlock,
+      });
+      rules.add({
+        'port': [443],
+        'network': 'udp',
+        'outbound': kOutboundTagBlock,
+      });
+      rules.add({
+        'network': 'udp',
+        'outbound': 'udp-noises',
+      });
+      route['final'] = 'tcp-fragment';
+    }
     // dedupe rule-set definitions (Iran block + DNS rule + diversion groups
     // can reference the same code)
     final dedupedRuleSets = <Map<String, dynamic>>[];

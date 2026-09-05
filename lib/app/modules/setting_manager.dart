@@ -1136,6 +1136,27 @@ class SettingConfigItemTLS {
   bool enablePadding = false;
   String paddingSize = SettingConfigItemTLS.kPaddingSize;
 
+  /// SNI-Spoofing (patterniha/SNI-Spoofing): dial a clean Cloudflare IP with
+  /// a whitelisted fake SNI; the real domain stays in the ws Host header.
+  bool enableSniSpoofing = false;
+  List<String> sniSpoofingIps = [
+    "199.181.197.1",
+    "103.160.204.34",
+    "185.193.30.94",
+    "45.8.211.57",
+    "159.112.235.52",
+    "170.114.45.239",
+    "188.42.88.24",
+    "88.216.67.230",
+    "45.130.125.75",
+  ];
+  String sniSpoofingFakeSni = "chatgpt.com";
+
+  /// Serverless mode (patterniha/Serverless-for-Iran): no proxy server —
+  /// direct connections with DPI-defeating fragmentation + UDP noise.
+  bool enableServerless = false;
+  bool serverlessLowDelay = true;
+
   Map<String, dynamic> toJson() {
     Map<String, dynamic> ret = {
       'enable_insecure': enableInsecure,
@@ -1145,6 +1166,11 @@ class SettingConfigItemTLS {
       'enable_mixed_case_sni': enableMixedCaseSNI,
       'enable_padding': enablePadding,
       'padding_size': paddingSize,
+      'enable_sni_spoofing': enableSniSpoofing,
+      'sni_spoofing_ips': sniSpoofingIps,
+      'sni_spoofing_fake_sni': sniSpoofingFakeSni,
+      'enable_serverless': enableServerless,
+      'serverless_low_delay': serverlessLowDelay,
     };
     return ret;
   }
@@ -1162,6 +1188,19 @@ class SettingConfigItemTLS {
     enableMixedCaseSNI = map["enable_mixed_case_sni"] ?? false;
     enablePadding = map["enable_padding"] ?? false;
     paddingSize = map["padding_size"] ?? SettingConfigItemTLS.kPaddingSize;
+    enableSniSpoofing = map["enable_sni_spoofing"] ?? false;
+    final ips = ConvertUtils.getListStringFromDynamic(
+      map["sni_spoofing_ips"],
+      true,
+      [],
+    );
+    if (ips != null && ips.isNotEmpty) {
+      sniSpoofingIps = ips;
+    }
+    sniSpoofingFakeSni =
+        map["sni_spoofing_fake_sni"] ?? sniSpoofingFakeSni;
+    enableServerless = map["enable_serverless"] ?? false;
+    serverlessLowDelay = map["serverless_low_delay"] ?? true;
   }
 
   static SettingConfigItemTLS fromJsonStatic(Map<String, dynamic>? map) {

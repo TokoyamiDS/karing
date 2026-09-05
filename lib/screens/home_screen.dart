@@ -26,6 +26,7 @@ import 'package:karing/app/modules/server_manager.dart';
 import 'package:karing/app/modules/setting_manager.dart';
 import 'package:karing/app/modules/zashboard.dart';
 import 'package:karing/app/runtime/return_result.dart';
+import 'package:karing/screens/add_profile_by_link_or_content_screen.dart';
 import 'package:karing/app/utils/accessibility_utils.dart';
 import 'package:karing/app/utils/app_lifecycle_state_notify.dart';
 import 'package:karing/app/utils/app_scheme_actions.dart';
@@ -2129,6 +2130,29 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     return null;
   }
 
+  /// Long-press on the connect button: cycle Proxy → Serverless → Proxy.
+  /// Show a toast-style notification with the new mode and reload if
+  /// connected (config changes require regeneration).
+  Future<void> _cycleConnectionMode() async {
+    final tlsSetting = SettingManager.getConfig().tls;
+    final wasConnected = await VPNService.getStarted();
+    tlsSetting.enableServerless = !tlsSetting.enableServerless;
+    if (tlsSetting.enableServerless) {
+      tlsSetting.enableSniSpoofing = false;
+    }
+    SettingManager.setDirty(true);
+    setState(() {});
+    final mode =
+        tlsSetting.enableServerless ? "Serverless (fragment/noise)" : "Normal (proxy)";
+    Log.w("connection mode cycled: $mode");
+    if (wasConnected) {
+      await setServerAndReload("connection_mode_cycle",
+          reason: "Mode: $mode");
+    } else {
+      AccessibilityUtils.announce(context, mode);
+    }
+  }
+
   Future<ReturnResultError?> onTapToggle(String from) async {
     bool started = await VPNService.getStarted();
     if (started) {
@@ -2713,6 +2737,11 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
                                         tooltip: stateTooltip,
                                         focusNode: _focusNodeSwitch,
                                         iconSize: 32,
+                                        onLongPress: working
+                                            ? null
+                                            : () async {
+                                                await _cycleConnectionMode();
+                                              },
                                         onPressed: working
                                             ? null
                                             : () async {
@@ -2836,6 +2865,16 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       return KeyEventResult.handled;
     }
 
+    // Ctrl+V on Home: clipboard subscription/share-link opens Add Profile
+    // prefilled. Skipped while a text field has focus so normal pasting works.
+    if (event.logicalKey == LogicalKeyboardKey.keyV &&
+        HardwareKeyboard.instance.isControlPressed &&
+        focus != null &&
+        focus.context?.widget is! EditableText) {
+      _onClipboardPasteShortcut();
+      return KeyEventResult.handled;
+    }
+
     if (event.logicalKey == LogicalKeyboardKey.arrowDown ||
         event.logicalKey == LogicalKeyboardKey.arrowUp) {
       if (focus != null) {
@@ -2869,6 +2908,60 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     }
 
     return KeyEventResult.ignored;
+  }
+
+  static const _linkSchemes = [
+    "vless://",
+    "vmess://",
+    "trojan://",
+    "ss://",
+    "hysteria2://",
+    "hy2://",
+    "tuic://",
+    "socks://",
+    "http://",
+    "https://",
+  ];
+
+  bool _clipboardLooksLikeProfileLink(String text) {
+    final t = text.trim();
+    if (t.isEmpty || t.length > 200000) {
+      return false;
+    }
+    final lower = t.toLowerCase();
+    return _linkSchemes.any((s) => lower.startsWith(s)) ||
+        lower.contains("://") && lower.contains("\n") == false &&
+            (lower.startsWith("vless") ||
+                lower.startsWith("vmess") ||
+                lower.startsWith("trojan"));
+  }
+
+  Future<void> _onClipboardPasteShortcut() async {
+    if (!_agreementApproved) {
+      return;
+    }
+    ClipboardData? data;
+    try {
+      data = await Clipboard.getData("text/plain");
+    } catch (err) {
+      return;
+    }
+    final text = data?.text ?? "";
+    if (!_clipboardLooksLikeProfileLink(text)) {
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        settings: AddProfileByLinkOrContentScreen.routSettings(),
+        builder: (context) => AddProfileByLinkOrContentScreen(
+          name: null,
+          urlOrContent: text,
+        ),
+      ),
+    );
+    await checkAndReload("ctrl+v");
+    setState(() {});
   }
 
   String getCurrentGroupId() {

@@ -733,6 +733,34 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
               },
             ),
           ),
+          GroupItemOptions(
+            pushOptions: GroupItemPushOptions(
+              name: "SNI Spoofing",
+              text: settingConfig.tls.enableSniSpoofing
+                  ? settingConfig.tls.sniSpoofingFakeSni
+                  : null,
+              onPush: () async {
+                await onTapSniSpoofing();
+              },
+            ),
+          ),
+          GroupItemOptions(
+            switchOptions: GroupItemSwitchOptions(
+              name: "Serverless (Iran)",
+              tips: "patterniha/Serverless-for-Iran: no proxy server. "
+                  "All TLS fragmented, QUIC blocked, UDP noise. "
+                  "Iranian sites stay direct.",
+              switchValue: settingConfig.tls.enableServerless,
+              onSwitch: (bool value) async {
+                settingConfig.tls.enableServerless = value;
+                if (value) {
+                  settingConfig.tls.enableSniSpoofing = false;
+                }
+                SettingManager.setDirty(true);
+                setState(() {});
+              },
+            ),
+          ),
           if (!settingConfig.novice) ...[
             GroupItemOptions(
               pushOptions: GroupItemPushOptions(
@@ -2150,6 +2178,76 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
 
   Future<void> onTapSocksLocal() async {
     GroupHelper.showSocksLocal(context, "settings");
+  }
+
+  Future<void> onTapSniSpoofing() async {
+    Future<List<GroupItem>> getOptions(
+      BuildContext context,
+      SetStateCallback? setstate,
+    ) async {
+      var settingConfig = SettingManager.getConfig();
+      List<GroupItemOptions> options = [
+        GroupItemOptions(
+          switchOptions: GroupItemSwitchOptions(
+            name: "Enable SNI Spoofing",
+            tips: "patterniha/SNI-Spoofing: dial a clean Cloudflare IP with "
+                "a whitelisted fake SNI. The real domain stays in the "
+                "ws Host header. For Irancell and similar networks.",
+            switchValue: settingConfig.tls.enableSniSpoofing,
+            onSwitch: (bool value) async {
+              settingConfig.tls.enableSniSpoofing = value;
+              if (value) {
+                settingConfig.tls.enableServerless = false;
+              }
+              SettingManager.setDirty(true);
+              setState(() {});
+            },
+          ),
+        ),
+        GroupItemOptions(
+          textFormFieldOptions: GroupItemTextFieldOptions(
+            name: "Fake SNI",
+            text: settingConfig.tls.sniSpoofingFakeSni,
+            hint: "chatgpt.com",
+            enabled: settingConfig.tls.enableSniSpoofing,
+            onChanged: (String value) {
+              settingConfig.tls.sniSpoofingFakeSni = value.trim();
+              SettingManager.setDirty(true);
+            },
+          ),
+        ),
+        GroupItemOptions(
+          textFormFieldOptions: GroupItemTextFieldOptions(
+            name: "Clean IPs (comma separated)",
+            text: settingConfig.tls.sniSpoofingIps.join(", "),
+            hint: "199.181.197.1, 103.160.204.34",
+            enabled: settingConfig.tls.enableSniSpoofing,
+            textWidthPercent: 0.55,
+            onChanged: (String value) {
+              settingConfig.tls.sniSpoofingIps = value
+                  .split(',')
+                  .map((e) => e.trim())
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+              SettingManager.setDirty(true);
+            },
+          ),
+        ),
+      ];
+      return [GroupItem(options: options)];
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        settings: GroupScreen.routSettings("sniSpoofing"),
+        builder: (context) => GroupScreen(
+          title: "SNI Spoofing",
+          getOptions: getOptions,
+        ),
+      ),
+    );
+    setState(() {});
   }
 
   Future<void> onTapTLS() async {

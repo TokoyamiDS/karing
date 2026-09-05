@@ -181,6 +181,29 @@ class _AddProfileByLinkOrContentScreenState
     } while (false);
 
     if (remarks == null || remarks.isEmpty) {
+      // prefer the filename in the URL path (e.g. .../free-configs.txt →
+      // "free-configs"); fall back to page title, then domain
+      final segments = url.pathSegments
+          .where((s) => s.trim().isNotEmpty)
+          .toList();
+      if (segments.isNotEmpty) {
+        String fileName = Uri.decodeComponent(segments.last);
+        final dot = fileName.lastIndexOf('.');
+        if (dot > 0) {
+          final ext = fileName.substring(dot + 1);
+          final isExtLike =
+              ext.length <= 5 && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(ext);
+          if (isExtLike) {
+            fileName = fileName.substring(0, dot);
+          }
+        }
+        if (fileName.trim().isNotEmpty) {
+          remarks = fileName.trim();
+        }
+      }
+    }
+
+    if (remarks == null || remarks.isEmpty) {
       final titleResult = await HttpUtils.httpGetTitle(
         result.data!,
         _compatible.join(";"),
