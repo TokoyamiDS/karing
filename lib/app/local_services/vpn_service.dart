@@ -241,35 +241,37 @@ class VPNService {
         options.allOutboundsTags.add(tag);
       }
     }
-    final selectMembers =
-        (selectOutbound is Map ? selectOutbound['outbounds'] : null) as List?;
-    final isEmptyGroup =
-        (current.type == kOutboundTypeUrltest ||
-            current.type == kOutboundTypeSelector) &&
-        (selectMembers == null || selectMembers.isEmpty);
-    if (isEmptyGroup) {
-      // aggregate urltest/selector with no members: use every enabled group
-      final tuple = Tuple2<List<ProxyConfig>, List<dynamic>>([], []);
-      getOutboundsWithoutUrltest(options.allOutboundsTags, tuple, null);
-      allOutBounds.clear();
-      allOutBounds.addAll(tuple.item2);
-      if (selectOutbound is Map) {
-        selectOutbound['outbounds'] = options.allOutboundsTags.toList();
+    // official behavior: every enabled group's nodes live in the config so
+    // the selector covers all subscriptions and per-node pings resolve
+    final tuple = Tuple2<List<ProxyConfig>, List<dynamic>>([], []);
+    final aggregatedTags = <String>{};
+    getOutboundsWithoutUrltest(aggregatedTags, tuple, null);
+    for (final tag in aggregatedTags) {
+      if (!options.allOutboundsTags.contains(tag)) {
+        options.allOutboundsTags.add(tag);
       }
-    } else if (current.groupid.isNotEmpty) {
-      final group = ServerManager.getByGroupId(current.groupid);
-      if (group != null) {
-        final selectedTags = options.allOutboundsTags.toSet();
-        for (final server in group.servers) {
-          if (!options.allOutboundsTags.contains(server.tag)) {
-            options.allOutboundsTags.add(server.tag);
-          }
-          if (selectedTags.contains(server.tag)) {
-            continue;
-          }
-          final ob = SingboxConfigBuilder.buildOutbound(server);
-          if (ob != null) {
-            allOutBounds.add(ob);
+    }
+    final existingOutboundTags = allOutBounds
+        .map((ob) => (ob is Map ? ob['tag'] : null)?.toString() ?? "")
+        .toSet();
+    for (final ob in tuple.item2) {
+      final tag = (ob is Map ? ob['tag'] : null)?.toString() ?? "";
+      if (tag.isNotEmpty && !existingOutboundTags.contains(tag)) {
+        allOutBounds.add(ob);
+      }
+    }
+    if (selectOutbound is Map &&
+        (current.type == kOutboundTypeUrltest ||
+            current.type == kOutboundTypeSelector)) {
+      // selector/urltest groups reference member tags; rebuild them over the
+      // full aggregated set
+      final currentMembers = selectOutbound['outbounds'] as List?;
+      if (currentMembers == null || currentMembers.isEmpty) {
+        selectOutbound['outbounds'] = options.allOutboundsTags.toList();
+      } else {
+        for (final m in currentMembers) {
+          if (!options.allOutboundsTags.contains(m.toString())) {
+            options.allOutboundsTags.add(m.toString());
           }
         }
       }
