@@ -335,12 +335,29 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
         }
       }, _focusNodeSystemProxy),
       sniSpoofing: HomeWidgetSwitchOptions((value) async {
+        final connected = await VPNService.getStarted();
         await checkAndReload("sni_spoofing_widget");
         setState(() {});
+        if (!connected && value) {
+          InAppNotifications.show(
+            title: "SNI Spoofing",
+            duration: const Duration(seconds: 4),
+            description: "Enabled — press Connect to apply.",
+          );
+        }
       }, null, _focusNodeSniSpoofing),
       serverless: HomeWidgetSwitchOptions((value) async {
+        final connected = await VPNService.getStarted();
         await checkAndReload("serverless_widget");
         setState(() {});
+        if (!connected) {
+          InAppNotifications.show(
+            title: "Serverless",
+            duration: const Duration(seconds: 4),
+            description:
+                value ? "Enabled — press Connect." : "Disabled — press Connect for proxy mode.",
+          );
+        }
       }, null, _focusNodeServerless),
       myProfiles: HomeWidgetCard0Options(
         onTapMyProfiles,
@@ -2523,6 +2540,13 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       stateTooltip = tcontext.meta.connected;
     } else {
       stateTooltip = tcontext.meta.disconnected;
+    }
+    // surface the active traffic mode on the main button
+    final tlsSettingForTooltip = SettingManager.getConfig().tls;
+    if (tlsSettingForTooltip.enableServerless) {
+      stateTooltip += " — Serverless";
+    } else if (tlsSettingForTooltip.enableSniSpoofing) {
+      stateTooltip += " — SNI Spoofing";
     }
     const double convexHeight = 80;
     const double convexIconSize = 50;
