@@ -786,10 +786,10 @@ class SingboxConfigBuilder {
     return result;
   }
 
-  /// SNI-Spoofing (patterniha/SNI-Spoofing): for TLS outbounds, dial a clean
-  /// Cloudflare IP instead of the (possibly poisoned) domain, present a
-  /// whitelisted fake SNI, and keep the real domain in the ws/grpc Host
-  /// header so the CDN still routes to the worker.
+  /// SNI-Spoofing (patterniha/SNI-Spoofing): for CDN-backed TLS outbounds
+  /// (ws/grpc/httpupgrade transport), dial a clean Cloudflare IP instead of
+  /// the configured address, present a whitelisted fake SNI, and keep the
+  /// real domain in the Host header so the CDN still routes to the worker.
   static int _sniSpoofingIpIndex = 0;
 
   static void _applySniSpoofing(List<dynamic> outbounds) {
@@ -807,11 +807,17 @@ class SingboxConfigBuilder {
       if (tls['enabled'] != true || tls['reality'] != null) {
         continue;
       }
-      final server = ob['server']?.toString() ?? "";
-      if (server.isEmpty || _isIpLiteral(server)) {
+      // only CDN-backed transports: the Host header must carry the real
+      // domain for routing — a bare tcp+tls node has no Host to preserve
+      if (ob['transport'] is! Map) {
         continue;
       }
-      // rotate through the clean IPs
+      final server = ob['server']?.toString() ?? "";
+      if (server.isEmpty) {
+        continue;
+      }
+      // rotate through the clean IPs — Patt: "put a healthy CF IP in the
+      // address field", regardless of what the link carried
       final ip = tlsSetting
           .sniSpoofingIps[_sniSpoofingIpIndex++ % tlsSetting.sniSpoofingIps.length];
       ob['server'] = ip;
@@ -828,16 +834,8 @@ class SingboxConfigBuilder {
         } else if (tr['host'] == null || tr['host'].toString().isEmpty) {
           tr['host'] = server;
         }
-      } else {
-        // raw tls/grpc without transport: server_name must stay the real
-        // domain for routing, spoofing only applies to cdn-backed ws/grpc
       }
     }
-  }
-
-  static bool _isIpLiteral(String host) {
-    return RegExp(r'^(\d{1,3}\.){3}\d{1,3}$').hasMatch(host) ||
-        host.contains(':') && !host.contains('.');
   }
 
   /// Patt's fragment+fingerprint method (t.me/patt_channel_x/91): apply the
