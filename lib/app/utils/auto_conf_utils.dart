@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:karing/app/modules/server_manager.dart';
 import 'package:karing/app/runtime/return_result.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
+import 'package:karing/app/local_services/vpn_service.dart';
 import 'package:karing/app/modules/setting_manager.dart';
+import 'package:karing/app/utils/http_utils.dart';
+import 'package:tuple/tuple.dart';
 import 'package:karing/app/utils/singbox_json_utils.dart';
 
 class AutoConfUtils {
@@ -90,16 +93,40 @@ class AutoConfUtils {
             content = urlOrPath;
           }
         } else {
-          final client = HttpClient();
-          client.connectionTimeout = const Duration(seconds: 30);
-          final req = await client.getUrl(Uri.parse(urlOrPath));
-          final res = await req.close();
-          if (res.statusCode != 200) {
-            client.close(force: true);
-            return ReturnResultError("http ${res.statusCode}");
+          // official behavior: subscription downloads ride the proxy
+          // (raw.githubusercontent.com etc. are blocked direct from Iran);
+          // fall back to direct when the proxy is down or fails.
+          final proxyPort = SettingManager.getConfig().proxy.mixedRulePort;
+          final userAgent = await HttpUtils.getUserAgent(
+            compatible: HttpUtils.getUserAgentsByUaString(group.userAgentCompatibles),
+          );
+          ReturnResult<Tuple2<int, String>> result =
+              await HttpUtils.httpGetRequest(
+            urlOrPath,
+            await VPNService.getStarted() ? proxyPort : null,
+            null,
+            const Duration(seconds: 30),
+            userAgent,
+            null,
+          );
+          if (result.error != null || (result.data?.item2.isEmpty ?? true)) {
+            final direct = await HttpUtils.httpGetRequest(
+              urlOrPath,
+              null,
+              null,
+              const Duration(seconds: 30),
+              userAgent,
+              null,
+            );
+            if (direct.error != null) {
+              return ReturnResultError(
+                result.error?.message ?? direct.error!.message,
+              );
+            }
+            content = direct.data!.item2;
+          } else {
+            content = result.data!.item2;
           }
-          content = await res.transform(utf8.decoder).join();
-          client.close(force: true);
         }
       } catch (err) {
         return ReturnResultError(err.toString());
