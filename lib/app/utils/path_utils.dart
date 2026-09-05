@@ -86,6 +86,26 @@ class PathUtils {
     if (_profileDir.isNotEmpty) {
       return _profileDir;
     }
+    // dev build: keep the profile OUTSIDE build/ so `flutter clean` and
+    // full rebuilds never wipe subscriptions/settings. Marker: a `.dev`
+    // file inside the exe-relative `portable` dir.
+    if (Platform.isWindows) {
+      try {
+        final marker = File(
+          path.join(profileDirForPortableMode(), ".dev"),
+        );
+        if (marker.existsSync()) {
+          final localAppData = Platform.environment['LOCALAPPDATA'] ?? "";
+          if (localAppData.isNotEmpty) {
+            final dir = path.join(localAppData, "karing-dev");
+            await Directory(dir).create(recursive: true);
+            _profileDir = dir;
+            _portableMode = true;
+            return _profileDir;
+          }
+        }
+      } catch (err, stacktrace) {}
+    }
     if (Platform.isWindows) {
       try {
         String profileDir = profileDirForPortableMode();

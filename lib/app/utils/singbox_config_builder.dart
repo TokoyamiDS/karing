@@ -720,6 +720,16 @@ class SingboxConfigBuilder {
     return inbounds;
   }
 
+  /// Tags that are structural (groups) and must never appear as group members.
+  static const List<String> kGroupTags = [
+    kOutboundTagProxy,
+    kOutboundTagAutoSelect,
+    kOutboundTagUrltest,
+    kOutboundTagDirect,
+    kOutboundTagBlock,
+    kOutboundTagDns,
+  ];
+
   static List<dynamic> outbounds(
       String unknownGroupTag,
       Set<String> allOutboundsTags,
@@ -735,6 +745,9 @@ class SingboxConfigBuilder {
     for (final ob in allOutBounds) {
       if (ob is Map && ob['tag'] != null) {
         final tag = ob['tag'].toString();
+        if (kGroupTags.contains(tag)) {
+          continue;
+        }
         if (allOutboundsTags.contains(tag) && seenTags.add(tag)) {
           outbounds.add(ob);
           tags.add(tag);

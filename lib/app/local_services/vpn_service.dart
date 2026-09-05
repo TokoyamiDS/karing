@@ -264,17 +264,12 @@ class VPNService {
         (current.type == kOutboundTypeUrltest ||
             current.type == kOutboundTypeSelector)) {
       // selector/urltest groups reference member tags; rebuild them over the
-      // full aggregated set
-      final currentMembers = selectOutbound['outbounds'] as List?;
-      if (currentMembers == null || currentMembers.isEmpty) {
-        selectOutbound['outbounds'] = options.allOutboundsTags.toList();
-      } else {
-        for (final m in currentMembers) {
-          if (!options.allOutboundsTags.contains(m.toString())) {
-            options.allOutboundsTags.add(m.toString());
-          }
-        }
-      }
+      // full aggregated set, excluding structural group tags so the config
+      // cannot become circular (e.g. urltest -> urltest).
+      final memberTags = options.allOutboundsTags
+          .where((t) => !SingboxConfigBuilder.kGroupTags.contains(t))
+          .toList();
+      selectOutbound['outbounds'] = memberTags;
     }
     if (options.allOutboundsTags.isEmpty) {
       options.allOutboundsTags.add(kOutboundTagDirect);
