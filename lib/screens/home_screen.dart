@@ -175,6 +175,9 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
   final FocusNode _focusNodeServerless = FocusNode(
     debugLabel: "scroll.${ServerlessCard.id()}",
   );
+  final FocusNode _focusNodeCloudflare = FocusNode(
+    debugLabel: "scroll.${CloudflareCard.id()}",
+  );
   final FocusNode _focusNodeMyProfiles = FocusNode(
     debugLabel: "scroll.${MyProfilesCard.id()}",
   );
@@ -359,6 +362,27 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
           );
         }
       }, null, _focusNodeServerless),
+      cloudflare: HomeWidgetSwitchOptions((value) async {
+        final connected = await VPNService.getStarted();
+        await checkAndReload("cloudflare_widget");
+        setState(() {});
+        final tls = SettingManager.getConfig().tls;
+        if (value && tls.cfScanResults.isEmpty) {
+          InAppNotifications.show(
+            title: "Cloudflare",
+            duration: const Duration(seconds: 4),
+            description: "No scanned clean IPs yet — tap the card to scan.",
+          );
+        } else {
+          InAppNotifications.show(
+            title: "Cloudflare",
+            duration: const Duration(seconds: 4),
+            description: value
+                ? "CF nodes now dial clean IPs${connected ? "" : " — press Connect"}."
+                : "Original addresses restored${connected ? "" : " — press Connect"}.",
+          );
+        }
+      }, null, _focusNodeCloudflare),
       myProfiles: HomeWidgetCard0Options(
         onTapMyProfiles,
         null,

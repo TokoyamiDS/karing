@@ -1181,6 +1181,10 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
     if (server.attach.isNotEmpty) {
       tagWidth = tagWidth - 30;
     }
+    bool isCfNode = ServerManager.isServerCloudflare(server);
+    if (isCfNode) {
+      tagWidth = tagWidth - 26;
+    }
     bool noFavGroup =
         server.groupid == ServerManager.getUrltestGroupId() ||
         server.groupid == ServerManager.getDirectGroupId() ||
@@ -1310,6 +1314,34 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
                             child: Text(
                               server.attach,
                               style: const TextStyle(fontSize: 10),
+                            ),
+                          ),
+                        ],
+                        if (isCfNode) ...[
+                          Container(
+                            width: 26,
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color: Colors.orange,
+                                  width: 0.6,
+                                ),
+                              ),
+                              child: const Text(
+                                "CF",
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.orange,
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -1824,6 +1856,7 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
     bool disabled = ServerManager.getUse().disable.contains(disableKey);
     String msg = disabled ? tcontext.meta.enable : tcontext.meta.disable;
     msg += "[${server.type};${server.server};${server.serverport}]";
+    bool isCfNode = ServerManager.isServerCloudflare(server);
 
     var widgets = [
       ListTile(
@@ -1840,6 +1873,16 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
           _loadRecommend();
           _buildData();
           setState(() {});
+        },
+      ),
+      ListTile(
+        title: Text(
+          "  ${isCfNode ? "Cloudflare ✓" : "Cloudflare ?"}  (${server.server})",
+          overflow: TextOverflow.ellipsis,
+        ),
+        onTap: () async {
+          Navigator.pop(context);
+          ServerManager.detectCloudflareNodes();
         },
       ),
     ];

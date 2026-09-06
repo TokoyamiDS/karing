@@ -15,6 +15,7 @@ import 'package:karing/app/utils/app_lifecycle_state_notify.dart';
 import 'package:karing/app/utils/auto_conf_utils.dart';
 import 'package:karing/app/utils/backup_and_sync_utils.dart';
 import 'package:karing/app/utils/clash_api.dart';
+import 'package:karing/app/utils/cloudflare_utils.dart';
 import 'package:karing/app/utils/convert_utils.dart';
 
 import 'package:karing/app/utils/file_utils.dart';
@@ -954,6 +955,7 @@ class ServerManager {
         for (var item in _serverConfig.items) {
           item.index = index++;
         }
+        Future.microtask(() => detectCloudflareNodes());
       }
     } catch (err, stacktrace) {
       SentryUtils.captureException(
@@ -971,6 +973,179 @@ class ServerManager {
 
   static Future<void> saveServerConfig() async {
     await _fileSaverServerConfig.saveAsJson(_serverConfig);
+  }
+
+  static bool _cfDetectRunning = false;
+  static bool _cfDetectPending = false;
+
+  /// Classifies every server host across all groups as Cloudflare-fronted or
+  /// not, storing the verdict in `raw['cf']` (persisted with the server
+  /// config). Literal CF IPs are matched against the official ranges;
+  /// domains are DNS-resolved with a small concurrency cap.
+  static Future<void> detectCloudflareNodes() async {
+    if (_cfDetectRunning) {
+      _cfDetectPending = true;
+      return;
+    }
+    _cfDetectRunning = true;
+    try {
+      final serversByHost = <String, List<ProxyConfig>>{};
+      for (var group in _serverConfig.items) {
+        for (var server in group.servers) {
+          final host = server.server.trim();
+          if (host.isEmpty) {
+            continue;
+          }
+          serversByHost.putIfAbsent(host, () => []).add(server);
+        }
+      }
+      if (serversByHost.isEmpty) {
+        return;
+      }
+      bool changed = false;
+      final unknown = <String>[];
+      for (final entry in serversByHost.entries) {
+        final cached = CloudflareDetector.checkSync(entry.key);
+        if (cached == null) {
+          unknown.add(entry.key);
+        } else {
+          if (_applyCfFlag(entry.value, cached)) {
+            changed = true;
+          }
+        }
+      }
+      if (unknown.isNotEmpty) {
+        int index = 0;
+        Future<void> worker() async {
+          while (index < unknown.length) {
+            final host = unknown[index++];
+            final result = await CloudflareDetector.check(host);
+            if (result == null) {
+              continue;
+            }
+            if (_applyCfFlag(serversByHost[host]!, result)) {
+              changed = true;
+            }
+          }
+        }
+
+        await Future.wait([
+          worker(),
+          worker(),
+          worker(),
+          worker(),
+        ]);
+      }
+      if (changed) {
+        await saveServerConfig();
+      }
+    } finally {
+      _cfDetectRunning = false;
+      if (_cfDetectPending) {
+        _cfDetectPending = false;
+        Future.microtask(() => detectCloudflareNodes());
+      }
+    }
+  }
+
+  static bool _applyCfFlag(List<ProxyConfig> servers, bool isCf) {
+    bool changed = false;
+    for (var pc in servers) {
+      if (isCf) {
+        if (pc.raw['cf'] != true) {
+          pc.raw['cf'] = true;
+          changed = true;
+        }
+      } else {
+        if (pc.raw.containsKey('cf')) {
+          pc.raw.remove('cf');
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  /// UI helper: is this node behind Cloudflare (literal IP in a CF range or
+  /// a domain whose resolved address is)?
+  static bool isServerCloudflare(ProxyConfig server) {
+    final host = server.server.trim();
+    if (host.isEmpty) {
+      return false;
+    }
+    if (CloudflareRanges.isCloudflareLiteral(host)) {
+      return true;
+    }
+    return server.raw['cf'] == true;
+  }
+
+  static bool hasReplacedCfServers() {
+    for (var group in _serverConfig.items) {
+      for (var s in group.servers) {
+        if (s.raw['server_ip_replaced'] == true) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// One-tap clean-IP replacement: every CF-fronted server node dials one of
+  /// [cleanIps] instead of its (possibly blocked) original address. The
+  /// original host is kept for display and restore; assignment is
+  /// deterministic per tag so nodes spread over the IP pool.
+  static int replaceCloudflareServerIps(List<String> cleanIps) {
+    if (cleanIps.isEmpty) {
+      return 0;
+    }
+    int count = 0;
+    for (var group in _serverConfig.items) {
+      for (var s in group.servers) {
+        if (s.type != kOutboundTypeServer) {
+          continue;
+        }
+        if (!isServerCloudflare(s)) {
+          continue;
+        }
+        final ip = cleanIps[s.tag.hashCode.abs() % cleanIps.length];
+        if (s.raw['server_ip_replaced'] != true) {
+          s.raw['cf_replaced'] = s.server;
+        }
+        s.raw['server_ip_replaced'] = true;
+        s.raw['server'] = ip;
+        count++;
+      }
+    }
+    if (count > 0) {
+      saveServerConfig();
+      setDirty(true);
+    }
+    return count;
+  }
+
+  /// Reverts [replaceCloudflareServerIps]: puts the original address back.
+  static int restoreCloudflareServerIps() {
+    int count = 0;
+    for (var group in _serverConfig.items) {
+      for (var s in group.servers) {
+        if (s.raw['server_ip_replaced'] != true) {
+          continue;
+        }
+        final original = s.raw['cf_replaced'];
+        if (original is String && original.isNotEmpty) {
+          s.raw['server'] = original;
+          s.server = original;
+        }
+        s.raw.remove('server_ip_replaced');
+        s.raw.remove('cf_replaced');
+        count++;
+      }
+    }
+    if (count > 0) {
+      saveServerConfig();
+      setDirty(true);
+    }
+    return count;
   }
 
   static Future<void> loadDiversionGroupConfig() async {
@@ -1844,6 +2019,8 @@ class ServerManager {
     await saveServerConfig();
     await saveDiversionGroupConfig();
     await saveUse();
+
+    Future.microtask(() => detectCloudflareNodes());
 
     Future.delayed(const Duration(milliseconds: 10), () {
       if (groupid.isEmpty) {

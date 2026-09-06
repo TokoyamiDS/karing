@@ -1152,6 +1152,9 @@ class SettingConfigItemTLS {
   ];
   String sniSpoofingFakeSni = "chatgpt.com";
 
+  /// Last Cloudflare scanner results, "ip|latencyMs|colo" per entry.
+  List<String> cfScanResults = [];
+
   /// Serverless mode (patterniha/Serverless-for-Iran): no proxy server —
   /// direct connections with DPI-defeating fragmentation + UDP noise.
   bool enableServerless = false;
@@ -1169,6 +1172,7 @@ class SettingConfigItemTLS {
       'enable_sni_spoofing': enableSniSpoofing,
       'sni_spoofing_ips': sniSpoofingIps,
       'sni_spoofing_fake_sni': sniSpoofingFakeSni,
+      'cf_scan_results': cfScanResults,
       'enable_serverless': enableServerless,
       'serverless_low_delay': serverlessLowDelay,
     };
@@ -1199,6 +1203,14 @@ class SettingConfigItemTLS {
     }
     sniSpoofingFakeSni =
         map["sni_spoofing_fake_sni"] ?? sniSpoofingFakeSni;
+    final cfResults = ConvertUtils.getListStringFromDynamic(
+      map["cf_scan_results"],
+      true,
+      [],
+    );
+    if (cfResults != null) {
+      cfScanResults = cfResults;
+    }
     enableServerless = map["enable_serverless"] ?? false;
     serverlessLowDelay = map["serverless_low_delay"] ?? true;
   }

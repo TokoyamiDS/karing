@@ -17,6 +17,7 @@ import 'package:karing/app/utils/proxy_conf_utils.dart';
 import 'package:karing/app/utils/singbox_config_builder.dart';
 import 'package:karing/i18n/strings.g.dart';
 import 'package:karing/screens/common_widget.dart';
+import 'package:karing/screens/cloudflare_scanner_screen.dart';
 import 'package:karing/screens/dialog_utils.dart';
 import 'package:karing/screens/group_helper.dart';
 import 'package:karing/screens/theme_config.dart';
@@ -500,6 +501,7 @@ class HomeWidgetOptions {
   HomeWidgetSwitchOptions? systemProxy;
   HomeWidgetSwitchOptions? sniSpoofing;
   HomeWidgetSwitchOptions? serverless;
+  HomeWidgetSwitchOptions? cloudflare;
 
   HomeWidgetCard0Options? myProfiles;
   HomeWidgetCard0Options? addProfile;
@@ -532,6 +534,7 @@ class HomeWidgetOptions {
     this.systemProxy,
     this.sniSpoofing,
     this.serverless,
+    this.cloudflare,
     this.myProfiles,
     this.addProfile,
     this.perapp,
@@ -562,6 +565,7 @@ class HomeWidgetOptions {
     focusToKeys[systemProxy?.focusNode] = systemProxy?.key;
     focusToKeys[sniSpoofing?.focusNode] = sniSpoofing?.key;
     focusToKeys[serverless?.focusNode] = serverless?.key;
+    focusToKeys[cloudflare?.focusNode] = cloudflare?.key;
     focusToKeys[myProfiles?.focusNode] = myProfiles?.key;
     focusToKeys[addProfile?.focusNode] = addProfile?.key;
     focusToKeys[perapp?.focusNode] = perapp?.key;
@@ -1180,6 +1184,71 @@ class ServerlessCard extends FutureSwitchCard {
 }
 
 class _ServerlessCardState extends FutureSwitchCardState<ServerlessCard> {}
+
+/// Cloudflare card: shows CF-node count and whether clean IPs are applied.
+/// Tap = open scanner screen; the switch = one-tap clean-IP replacement
+/// (dial a healthy CF edge instead of the possibly blocked original host).
+class CloudflareCard extends FutureSwitchCard {
+  CloudflareCard({
+    super.key,
+    this.onAfterPressed,
+    this.onValueChanged,
+    super.focusNode,
+  }) : super(
+          icon: Icons.cloud_outlined,
+          title: "Cloudflare",
+          text: "Clean IPs",
+          getEnable: CloudflareCard.getEnabled,
+          onPressed: (context) async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                settings: CloudflareScannerScreen.routSettings(),
+                builder: (context) => const CloudflareScannerScreen(),
+              ),
+            );
+            onAfterPressed?.call();
+          },
+          onChanged: (context, value) async {
+            if (value) {
+              final ips = SettingManager.getConfig().tls.cfScanResults
+                  .map((e) => e.split("|").first)
+                  .where((e) => e.isNotEmpty)
+                  .toList();
+              if (ips.isEmpty) {
+                return;
+              }
+              ServerManager.replaceCloudflareServerIps(ips.take(8).toList());
+            } else {
+              ServerManager.restoreCloudflareServerIps();
+            }
+            onValueChanged?.call(value);
+          },
+        );
+  final Function()? onAfterPressed;
+  final Function(bool value)? onValueChanged;
+
+  @override
+  State<CloudflareCard> createState() => _CloudflareCardState();
+
+  static Future<bool> getEnabled() async {
+    return ServerManager.hasReplacedCfServers();
+  }
+
+  static bool supportedCurrentPlatfrom() {
+    return true;
+  }
+
+  static String id() {
+    return "cloudflare";
+  }
+
+  static int crossAxisCellCount() {
+    return 4;
+  }
+}
+
+class _CloudflareCardState extends FutureSwitchCardState<CloudflareCard> {}
 
 class SystemProxyCard extends FutureSwitchCard {
   SystemProxyCard({
@@ -1872,6 +1941,10 @@ class _ServerSelectCardState extends State<ServerSelectCard> {
       isTesting = ServerManager.isTestOutboundServerLatencying(groupid, tag);
       isWaitTesting = item.testLatency.contains(tag);
     }
+    ProxyConfig? cfProxy = tag.isEmpty
+        ? null
+        : ServerManager.getConfig().getByTag(tag);
+    bool isCfNode = cfProxy != null && ServerManager.isServerCloudflare(cfProxy);
 
     return Material(
       color: theme.colorScheme.surfaceContainerLow.withAlpha(alpha),
@@ -1914,6 +1987,31 @@ class _ServerSelectCardState extends State<ServerSelectCard> {
                                 ),
                               ),
                             ),
+                            if (isCfNode) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: Colors.orange,
+                                    width: 0.6,
+                                  ),
+                                ),
+                                child: const Text(
+                                  "CF",
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                              ),
+                            ],
                             if (delay.isNotEmpty) ...[
                               const SizedBox(width: 5),
                               CommonWidget.createLatencyWidget(
@@ -2029,6 +2127,9 @@ class HomeWidgets {
     if (ServerlessCard.supportedCurrentPlatfrom()) {
       ids.add(ServerlessCard.id());
     }
+    if (CloudflareCard.supportedCurrentPlatfrom()) {
+      ids.add(CloudflareCard.id());
+    }
     if (MyProfilesCard.supportedCurrentPlatfrom()) {
       ids.add(MyProfilesCard.id());
     }
@@ -2119,6 +2220,9 @@ class HomeWidgets {
     if (ServerlessCard.id() == id) {
       return Icons.bolt_outlined;
     }
+    if (CloudflareCard.id() == id) {
+      return Icons.cloud_outlined;
+    }
     if (MyProfilesCard.id() == id) {
       return Icons.list_alt_outlined;
     }
@@ -2208,6 +2312,9 @@ class HomeWidgets {
     }
     if (ServerlessCard.id() == id) {
       return "Serverless";
+    }
+    if (CloudflareCard.id() == id) {
+      return "Cloudflare";
     }
     if (MyProfilesCard.id() == id) {
       return t.meta.myProfiles;
@@ -2554,6 +2661,20 @@ class HomeWidgets {
           onAfterPressed: options.serverless!.onAfterPressed,
           onValueChanged: options.serverless!.onChanged,
           focusNode: options.serverless!.focusNode,
+        ),
+      );
+    }
+    if (CloudflareCard.id() == id &&
+        options.cloudflare != null &&
+        CloudflareCard.supportedCurrentPlatfrom()) {
+      return GridItem(
+        crossAxisCellCount: CloudflareCard.crossAxisCellCount(),
+        id: id,
+        child: CloudflareCard(
+          key: options.cloudflare!.key,
+          onAfterPressed: options.cloudflare!.onAfterPressed,
+          onValueChanged: options.cloudflare!.onChanged,
+          focusNode: options.cloudflare!.focusNode,
         ),
       );
     }

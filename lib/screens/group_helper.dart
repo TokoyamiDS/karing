@@ -42,6 +42,7 @@ import 'package:karing/screens/diversion_rule_detect_screen.dart';
 import 'package:karing/screens/diversion_rules_screen.dart';
 import 'package:karing/screens/dns_auto_setup_screen.dart';
 import 'package:karing/screens/dns_settings_screen.dart';
+import 'package:karing/screens/cloudflare_scanner_screen.dart';
 import 'package:karing/screens/sni_scanner_screen.dart';
 import 'package:karing/screens/group_item_creator.dart';
 import 'package:karing/screens/group_item_options.dart';
@@ -3546,6 +3547,23 @@ class GroupHelper {
                 MaterialPageRoute(
                   settings: SniScannerScreen.routSettings(),
                   builder: (context) => const SniScannerScreen(),
+                ),
+              );
+            },
+          ),
+        ),
+        GroupItemOptions(
+          pushOptions: GroupItemPushOptions(
+            name: "Cloudflare Scanner",
+            tips: "Scan random IPs across the official Cloudflare ranges "
+                "and verify each with /cdn-cgi/trace. Applies the fastest "
+                "healthy IPs as SNI-Spoofing clean IPs.",
+            onPush: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  settings: CloudflareScannerScreen.routSettings(),
+                  builder: (context) => const CloudflareScannerScreen(),
                 ),
               );
             },
