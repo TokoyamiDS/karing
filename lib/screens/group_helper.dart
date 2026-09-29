@@ -339,6 +339,22 @@ class GroupHelper {
           ),
         ),
         if (!settingConfig.novice) ...[
+          // Windows only. A second full tunnel competes for the default route
+          // and is what makes Windows reset the WLAN adapter. Switching this
+          // off is the same as the start-up dialog's Bypass, and is the way back
+          // if the detection ever gets it wrong.
+          if (Platform.isWindows)
+            GroupItemOptions(
+              switchOptions: GroupItemSwitchOptions(
+                name: tcontext.SettingsScreen.foreignTunnelCheck,
+                tips: tcontext.SettingsScreen.foreignTunnelCheckTips,
+                switchValue: !settingConfig.tun.ignoreForeignTunnel,
+                onSwitch: (bool value) async {
+                  settingConfig.tun.ignoreForeignTunnel = !value;
+                  SettingManager.setDirty(true);
+                },
+              ),
+            ),
           GroupItemOptions(
             textFormFieldOptions: GroupItemTextFieldOptions(
               name: "IPv4",
@@ -1668,6 +1684,43 @@ class GroupHelper {
                     },
             ),
           ),
+          // The three per-purpose switches that predate the consolidated
+          // Resolve Channel dropdown. Additive: each forces its own behaviour
+          // on regardless of the dropdown, so neither control can contradict
+          // the other.
+          GroupItemOptions(
+            switchOptions: GroupItemSwitchOptions(
+              name: tcontext.SettingsScreen.dnsEnableFakeIp,
+              tips: tcontext.SettingsScreen.dnsEnableFakeIpTips,
+              switchValue: settingConfig.dns.enableFakeIp,
+              onSwitch: (bool value) async {
+                settingConfig.dns.enableFakeIp = value;
+                SettingManager.setDirty(true);
+              },
+            ),
+          ),
+          GroupItemOptions(
+            switchOptions: GroupItemSwitchOptions(
+              name: tcontext.SettingsScreen.dnsEnableProxyResolveByProxy,
+              tips: tcontext.SettingsScreen.dnsEnableProxyResolveByProxyTips,
+              switchValue: settingConfig.dns.enableProxyResolveByProxy,
+              onSwitch: (bool value) async {
+                settingConfig.dns.enableProxyResolveByProxy = value;
+                SettingManager.setDirty(true);
+              },
+            ),
+          ),
+          GroupItemOptions(
+            switchOptions: GroupItemSwitchOptions(
+              name: tcontext.SettingsScreen.dnsEnableFinalResolveByProxy,
+              tips: tcontext.SettingsScreen.dnsEnableFinalResolveByProxyTips,
+              switchValue: settingConfig.dns.enableFinalResolveByProxy,
+              onSwitch: (bool value) async {
+                settingConfig.dns.enableFinalResolveByProxy = value;
+                SettingManager.setDirty(true);
+              },
+            ),
+          ),
         ],
         GroupItemOptions(
           stringPickerOptions: GroupItemStringPickerOptions(
@@ -1699,6 +1752,9 @@ class GroupHelper {
                       settingConfig.dns.proxyResolveMode =
                           SettingConfigItemDNSProxyResolveMode.proxy;
                     }
+                    // The dropdown is the master control, so bring the three
+                    // per-purpose switches back into step with it.
+                    settingConfig.dns.syncResolveFlagsToMode();
                     SettingManager.setDirty(true);
                   },
           ),

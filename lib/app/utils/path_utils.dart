@@ -5,6 +5,7 @@ import "dart:io";
 import "package:karing/app/utils/app_utils.dart";
 import "package:karing/app/utils/file_utils.dart";
 import "package:path/path.dart" as path;
+import "package:path_provider/path_provider.dart";
 import "package:vpn_service/vpn_service.dart";
 
 class PathUtils {
@@ -78,6 +79,16 @@ class PathUtils {
         await Directory(dir).create(recursive: true);
         return dir;
       }
+    }
+    if (Platform.isAndroid) {
+      // Android has neither an APPDATA/HOME-style env var nor an App Group
+      // container (getAppGroupDirectory is an Apple-only concept and returns
+      // null here), so the app-private files dir is the persistent home for
+      // profiles/settings/cache. Without this branch profileDir() returns ""
+      // and startup aborts on LaunchFailedScreen(invalidProfile).
+      final dir = await getApplicationSupportDirectory();
+      await dir.create(recursive: true);
+      return dir.path;
     }
     return "";
   }
@@ -242,8 +253,48 @@ class PathUtils {
     return "app.log";
   }
 
+  /// Directory the diagnostic logs are written to.
+  ///
+  /// Prefers the directory holding the executable. For a local build that is
+  /// the build output folder, so `app.log`, `service_core.log` and
+  /// `service_error.log` land right beside `karing.exe` where they are trivial
+  /// to find and hand over. Falls back to the profile dir when the exe
+  /// directory cannot be written (an install under Program Files, say).
+  static String? _logDir;
+  static Future<String> logDir() async {
+    if (_logDir != null) {
+      return _logDir!;
+    }
+    final exe = exeDir();
+    if (exe.isNotEmpty) {
+      try {
+        final probe = File(path.join(exe, ".log_write_probe"));
+        await probe.writeAsString("", flush: true);
+        await probe.delete();
+        _logDir = exe;
+        return _logDir!;
+      } catch (err) {}
+    }
+    _logDir = await profileDir();
+    return _logDir!;
+  }
+
+  /// Path for the core to write its own log to, or null if no writable
+  /// directory has been probed yet.
+  ///
+  /// Sync so the config builder can decide whether it is safe to set
+  /// `log.output`. sing-box **fatal**s on startup when that path is not
+  /// writable — verified: `FATAL start service: start logger: open ...` — so it
+  /// must never be guessed. [logDir] has already proved the directory writable
+  /// by the time this returns non-null, because the app writes `app.log` there
+  /// at startup.
+  static String? coreLogOutputPathIfProbed() {
+    final dir = _logDir;
+    return dir == null ? null : path.join(dir, serviceLogFileName());
+  }
+
   static Future<String> logFilePath() async {
-    String filePath = await profileDir();
+    String filePath = await logDir();
     return path.join(filePath, logFileName());
   }
 
@@ -252,7 +303,7 @@ class PathUtils {
   }
 
   static Future<String> serviceStdErrorFilePath() async {
-    String filePath = await PathUtils.profileDir();
+    String filePath = await logDir();
     return path.join(filePath, serviceStdErrorFileName());
   }
 
@@ -261,7 +312,7 @@ class PathUtils {
   }
 
   static Future<String> serviceLogFilePath() async {
-    String filePath = await PathUtils.profileDir();
+    String filePath = await logDir();
     return path.join(filePath, serviceLogFileName());
   }
 

@@ -24,6 +24,7 @@ import 'package:karing/app/modules/proxy_cluster.dart';
 import 'package:karing/app/modules/remote_config_manager.dart';
 import 'package:karing/app/modules/server_manager.dart';
 import 'package:karing/app/modules/setting_manager.dart';
+import 'package:karing/app/modules/statistics_recorder.dart';
 import 'package:karing/app/modules/zashboard.dart';
 import 'package:karing/app/runtime/return_result.dart';
 import 'package:karing/screens/add_profile_by_link_or_content_screen.dart';
@@ -34,7 +35,6 @@ import 'package:karing/app/utils/app_utils.dart';
 import 'package:karing/app/utils/clash_api.dart';
 import 'package:karing/app/utils/convert_utils.dart';
 import 'package:karing/app/utils/diversion_custom_utils.dart';
-import 'package:karing/app/utils/emoji_utils.dart';
 import 'package:karing/app/utils/error_reporter_utils.dart';
 import 'package:karing/app/utils/file_utils.dart';
 import 'package:karing/app/utils/http_utils.dart';
@@ -72,6 +72,7 @@ import 'package:karing/screens/richtext_viewer.screen.dart';
 import 'package:karing/screens/scheme_handler.dart';
 import 'package:karing/screens/server_select_screen.dart';
 import 'package:karing/screens/settings_screen.dart';
+import 'package:karing/screens/speed_test_dialog.dart';
 import 'package:karing/screens/themes.dart';
 import 'package:karing/screens/tv_mode_screen.dart';
 import 'package:karing/screens/user_agreement_screen.dart';
@@ -247,6 +248,8 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
 
     WidgetsBinding.instance.addObserver(this);
 
+    HardwareKeyboard.instance.addHandler(_onGlobalKeyEvent);
+
     protocolHandler.addListener(this);
     Biz.onEventSingletonInstance = (String url) {
       Log.w("onEventSingletonInstance: $url");
@@ -271,6 +274,9 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
         },
         null,
         _focusNodeOutletIpByCurrentSelectedInfo,
+        // The card shows the exit IP, which only changes when the node does, so
+        // give it a way to ask again without reconnecting.
+        onRefresh: _updateWanIP,
       ),
       /*outletIpByDirectInfo: HomeWidgetCard1Options(
         () {},
@@ -408,7 +414,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       netCheck: HomeWidgetCard0Options(onTapNetCheck, null, _focusNodeNetCheck),
       speedtest: HomeWidgetCard0Options(
         onTapSpeedTest,
-        null,
+        onLongPressSpeedTest,
         _focusNodeSpeedTest,
       ),
       myLink: HomeWidgetCard0Options(onTapLink, null, _focusNodeMyLink),
@@ -673,10 +679,13 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
   }
 
   void _startStateCheckTimer() {
-    if (!Platform.isAndroid) {
-      return;
-    }
-    const Duration duration = Duration(seconds: 1);
+    // Reconcile the cached UI state with the service on every platform. On
+    // Android this has always run; on Windows/Linux/macOS the push callbacks
+    // can deliver a stale `disconnected` after a reload already brought the
+    // core up, leaving the home screen showing "disconnected" while it works.
+    final Duration duration = Platform.isAndroid
+        ? const Duration(seconds: 1)
+        : const Duration(seconds: 2);
     _timerStateChecker ??= Timer.periodic(duration, (timer) async {
       if (AppLifecycleStateNofity.isPaused()) {
         return;
@@ -691,8 +700,42 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     _timerStateChecker = null;
   }
 
+  /// Traffic recording only runs while the core is up, because that is the only
+  /// time `/connections` has anything to report. The recorded history is on
+  /// disk, so the Statistics screen keeps working after the VPN is stopped.
+  void _startStatistics() {
+    final settingConfig = SettingManager.getConfig();
+    if (!settingConfig.statistics.enable) {
+      return;
+    }
+    StatisticsRecorder.start(settingConfig.proxy.controlPort);
+  }
+
+  void _stopStatistics() {
+    StatisticsRecorder.stop();
+  }
+
   Future<void> _checkState() async {
     var state = await VPNService.getState();
+    // A reload can leave `_state == connected` while `_disconnectToService()`
+    // cancelled the poll timers; the periodic check re-arms them instead of
+    // waiting for a state transition that will never come.
+    if (state == FlutterVpnServiceState.connected) {
+      if (!AppLifecycleStateNofity.isPaused()) {
+        _connectToCurrent();
+        _connectToService();
+      }
+      // Re-assert the tray state: the connected push may have been deduped,
+      // leaving the tray icon/menu on the previous value.
+      Biz.vpnStateChanged(true);
+      // Idempotent, and re-arms recording after a reload cancelled the timers —
+      // it is also what picks up Statistics being switched on mid-session.
+      _startStatistics();
+      if (_state != FlutterVpnServiceState.connected) {
+        await _onStateChanged(state, {});
+      }
+      return;
+    }
     await _onStateChanged(state, {});
   }
 
@@ -890,14 +933,18 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       return;
     }
 
-    final iplocal = await NetworkUtils.getOutletIp(
-      setting.proxy.mixedForwardPort,
-    );
-
+    // Show the selected node's *recorded* exit location — the same value and the
+    // same age the server list shows — rather than re-fetching through the
+    // forward port. That fetch was unreliable (the port can be taken by another
+    // tool, as adb did on this machine) and a fresh reading always reported an
+    // age of zero, which told the user nothing about whether it was current.
+    final current = VPNService.getCurrent();
     _widgetOptions.outletIpByCurrentSelectedInfo!.notifier.value =
-        iplocal.item1 != null
-        ? "${EmojiUtils.countryCodeToEmoji(iplocal.item1!.countryCode)} ${iplocal.item1!.ip}"
-        : "";
+        NetworkUtils.outletLabel(
+          current.outletregion,
+          current.outletip,
+          current.outletIpCost,
+        );
   }
 
   void _updateDirectWanIP() async {
@@ -1022,6 +1069,32 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     }
   }
 
+  /// Rebuilds `_currentServer` from the persisted recent selection. A recent
+  /// entry can be stale after a profile update, removal, disable, or the app
+  /// simply not having the node anymore; [ServerManager.resolveSelection]
+  /// maps it back to the live node. When nothing usable is left we fall back
+  /// to the auto-select (urltest) group instead of trying to start with a
+  /// dangling node (which produced the "[ ] has been disabled" error).
+  void _restoreSelection() {
+    final resolved = ServerManager.resolveSelection(ServerManager.getMostRecent());
+    if (resolved != null) {
+      _currentServer = resolved;
+      if (_currentServer.groupid == ServerManager.getUrltestGroupId()) {
+        _currentServer.latency = "";
+      }
+      VPNService.setCurrent(_currentServer);
+      _currentServerForUrltest.clear();
+      ServerManager.addRecent(_currentServer);
+      ServerManager.saveUse();
+      return;
+    }
+    _currentServer = ServerManager.getUrltest();
+    VPNService.setCurrent(_currentServer);
+    _currentServerForUrltest.clear();
+    ServerManager.addRecent(_currentServer);
+    ServerManager.saveUse();
+  }
+
   Future<void> _onInitAllFinish() async {
     NoticeManager.onEventCheck.add(() {
       setState(() {});
@@ -1039,35 +1112,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     checkError("_onInitAllFinish", showAlert: false);
 
     if (_currentServer.tag.isEmpty) {
-      ProxyConfig? config = ServerManager.getMostRecent();
-      if (config != null) {
-        _currentServer = config;
-        if (_currentServer.groupid != ServerManager.getUrltestGroupId()) {
-          ProxyConfig? server;
-          if (_currentServer.tag.isNotEmpty) {
-            if (_currentServer.groupid.isNotEmpty) {
-              server = ServerManager.getConfig().getByGroupIdAndTag(
-                _currentServer.groupid,
-                _currentServer.tag,
-              );
-            }
-            server ??= ServerManager.getConfig().getByTag(_currentServer.tag);
-          }
-          if (server != null) {
-            _currentServer = server;
-          }
-        } else {
-          _currentServer.latency = "";
-        }
-        VPNService.setCurrent(_currentServer);
-        _currentServerForUrltest.clear();
-      } else {
-        _currentServer = ServerManager.getUrltest();
-        VPNService.setCurrent(_currentServer);
-        _currentServerForUrltest.clear();
-        ServerManager.addRecent(_currentServer);
-        ServerManager.saveUse();
-      }
+      _restoreSelection();
     }
 
     Biz.onEventRequestStartVPN = _onRequestStartVPN;
@@ -1211,6 +1256,13 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     if (ServerManager.getUpdateDirty()) {
       ServerManager.setDirty(true);
     }
+    // Sync cached _state with the actual VPN state. The async callback chain
+    // in VPNService.onStateChanged can deliver state updates out of order on
+    // Windows: the disconnected callback has awaits (getSystemProxyEnable),
+    // the connected one doesn't, so after a reload the stale disconnected
+    // callback can overwrite _state back to disconnected even though the core
+    // is already up. _lastState (returned by getState) is always synchronous.
+    _state = await VPNService.getState();
     if (_state == FlutterVpnServiceState.connected) {
       return await checkAndReload(from, disableShowAlertDialog: true);
     }
@@ -1256,6 +1308,12 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       _disconnectToService();
       Biz.vpnStateChanged(false);
       _stopStateCheckTimer();
+    }
+
+    if (state == FlutterVpnServiceState.connected) {
+      _startStatistics();
+    } else {
+      _stopStatistics();
     }
 
     setState(() {});
@@ -1379,35 +1437,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
   }
 
   Future<void> _onEventReloadFromZip() async {
-    ProxyConfig? config = ServerManager.getMostRecent();
-    if (config != null) {
-      _currentServer = config;
-      if (_currentServer.groupid != ServerManager.getUrltestGroupId()) {
-        ProxyConfig? server;
-        if (_currentServer.tag.isNotEmpty) {
-          if (_currentServer.groupid.isNotEmpty) {
-            server = ServerManager.getConfig().getByGroupIdAndTag(
-              _currentServer.groupid,
-              _currentServer.tag,
-            );
-          }
-          server ??= ServerManager.getConfig().getByTag(_currentServer.tag);
-        }
-
-        if (server != null) {
-          _currentServer = server;
-        }
-      }
-
-      VPNService.setCurrent(_currentServer);
-    } else {
-      _currentServer = ServerManager.getUrltest();
-      VPNService.setCurrent(_currentServer);
-
-      ServerManager.addRecent(_currentServer);
-      ServerManager.saveUse();
-    }
-
+    _restoreSelection();
     setState(() {});
   }
 
@@ -1530,12 +1560,23 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     final tcontext = Translations.of(context);
     String savePath = await PathUtils.serviceCoreConfigFilePath();
     VPNServiceSetServerOptions options = VPNServiceSetServerOptions();
-    options.disabledServerError = tcontext.HomeScreen.disabledServer(p: "");
-    options.invalidServerError = tcontext.HomeScreen.invalidServer(p: "");
+    options.disabledServerError = tcontext.HomeScreen.disabledServer(
+      p: _currentServer.tag,
+    );
+    options.invalidServerError = tcontext.HomeScreen.invalidServer(
+      p: _currentServer.tag,
+    );
     options.expiredServerError = tcontext.HomeScreen.expiredServer;
     ReturnResultError? resultError;
-    if (_currentServer.groupid.isEmpty) {
+    // Never hand a dangling/stale selection to the config builder: a recent
+    // entry can survive a profile update, a node removal, or a disable. Fall
+    // back to the auto-select group so "server disabled" is not returned for
+    // an otherwise healthy profile.
+    if (_currentServer.groupid.isEmpty ||
+        (_currentServer.type == kOutboundTypeServer &&
+            ServerManager.resolveSelection(_currentServer) == null)) {
       _currentServer = ServerManager.getUrltest();
+      VPNService.setCurrent(_currentServer);
     }
     try {
       resultError = await VPNService.setServer(
@@ -1577,6 +1618,48 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     return await Biz.startOrRestartIfDirtyVPN(context, "HomeScreen");
   }
 
+  bool _foreignTunnelPrompted = false;
+
+  /// Warns about another client's tunnel before the config is built, and offers
+  /// a Bypass.
+  ///
+  /// Must run *before* `setServer()`: the tun inbound is baked into the config
+  /// there, so a bypass applied afterwards would not put it back. Prompted at
+  /// most once per session — two start paths reach this, and repeating the
+  /// dialog would be noise rather than information.
+  Future<void> _checkForeignTunnel(bool disableShowAlertDialog) async {
+    if (_foreignTunnelPrompted ||
+        SettingManager.getConfig().tun.ignoreForeignTunnel) {
+      return;
+    }
+    final foreignTunnels = await NetworkUtils.findForeignTunnels();
+    if (foreignTunnels.isEmpty) {
+      return;
+    }
+    _foreignTunnelPrompted = true;
+    Log.w(
+      "start: foreign tunnel present (${foreignTunnels.join(', ')}), "
+      "tun=${SettingManager.getConfig().tun.enable}",
+    );
+    if (disableShowAlertDialog || !mounted) {
+      return;
+    }
+    // Bypass exists because the detection can be wrong. Without it a false
+    // positive would lock the user out of TUN mode with no way back.
+    final bypass = await DialogUtils.showConfirmDialog(
+      context,
+      t.HomeScreen.foreignTunnel(adapters: foreignTunnels.join(', ')),
+      okText: t.HomeScreen.foreignTunnelBypass,
+      cancelText: t.meta.cancel,
+    );
+    if (bypass == true) {
+      SettingManager.getConfig().tun.ignoreForeignTunnel = true;
+      SettingManager.setDirty(true);
+      await SettingManager.save();
+      Log.w("start: foreign tunnel check bypassed by the user");
+    }
+  }
+
   Future<ReturnResultError?> setServerAndReload(
     String from, {
     bool disableShowAlertDialog = false,
@@ -1596,6 +1679,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     _currentServerForUrltest.clear();
 
     setState(() {});
+    await _checkForeignTunnel(disableShowAlertDialog);
     var result = await setServer();
     bool tunMode = await VPNService.getTunMode();
     if (result.item1 == null) {
@@ -1661,7 +1745,27 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     setState(() {});
   }
 
-  void onTapSpeedTest() async {
+  /// Tap measures throughput in-app; long-press still opens the speedtest page.
+  ///
+  /// Both are worth keeping. The dialog answers "how fast am I right now" in a
+  /// couple of taps and reports through the tunnel, which is the number that
+  /// matters. The page covers what it does not — jitter, packet loss, a second
+  /// opinion from a different backend.
+  Future<void> onTapSpeedTest() async {
+    final setting = SettingManager.getConfig();
+    final started = await VPNService.getStarted();
+    if (!mounted) {
+      return;
+    }
+    // Port 0 dials directly, so the reading still means something with the core
+    // down — and says which path it took, so the two are never confused.
+    await SpeedTestDialog.show(
+      context,
+      started ? setting.proxy.mixedRulePort : 0,
+    );
+  }
+
+  void onLongPressSpeedTest() async {
     final tcontext = Translations.of(context);
     var setting = SettingManager.getConfig();
     await WebviewHelper.loadUrl(
@@ -2114,6 +2218,12 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
   }
 
   Future<void> onTapServerSelect() async {
+    // Nothing imported yet: the server list would be empty and the user would
+    // be stuck with no way forward. Send them to the add-profile flow instead.
+    if (!ServerManager.hasServers()) {
+      onTapAddProfileByStart();
+      return;
+    }
     ProxyConfig? result = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -2345,6 +2455,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
         }
       }
     }
+    await _checkForeignTunnel(disableShowAlertDialog);
     var result = await setServer();
     bool tunMode = await VPNService.getTunMode();
     if (result.item1 != null) {
@@ -2467,6 +2578,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onGlobalKeyEvent);
     _focusNodeSwitch.dispose();
     _focusNodeEdit.dispose();
     _widgetOptions.focusToKeys.clear();
@@ -2568,9 +2680,9 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     // surface the active traffic mode on the main button
     final tlsSettingForTooltip = SettingManager.getConfig().tls;
     if (tlsSettingForTooltip.enableServerless) {
-      stateTooltip += " — Serverless";
+      stateTooltip += " — ${tcontext.HomeScreen.serverless}";
     } else if (tlsSettingForTooltip.enableSniSpoofing) {
-      stateTooltip += " — SNI Spoofing";
+      stateTooltip += " — ${tcontext.HomeScreen.sniSpoofing}";
     }
     const double convexHeight = 80;
     const double convexIconSize = 50;
@@ -2750,6 +2862,9 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
                                       crossAxisCount: columns,
                                       crossAxisSpacing: spacing,
                                       mainAxisSpacing: spacing,
+                                      // Grid defaults to ltr, which laid the
+                                      // dashboard out backwards in Persian.
+                                      textDirection: Directionality.of(context),
                                       children: widgets,
                                     ),
                               if (!_edit) ...[SizedBox(height: convexIconSize)],
@@ -2927,16 +3042,6 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       return KeyEventResult.handled;
     }
 
-    // Ctrl+V on Home: clipboard subscription/share-link opens Add Profile
-    // prefilled. Skipped while a text field has focus so normal pasting works.
-    if (event.logicalKey == LogicalKeyboardKey.keyV &&
-        HardwareKeyboard.instance.isControlPressed &&
-        focus != null &&
-        focus.context?.widget is! EditableText) {
-      _onClipboardPasteShortcut();
-      return KeyEventResult.handled;
-    }
-
     if (event.logicalKey == LogicalKeyboardKey.arrowDown ||
         event.logicalKey == LogicalKeyboardKey.arrowUp) {
       if (focus != null) {
@@ -2996,6 +3101,20 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
             (lower.startsWith("vless") ||
                 lower.startsWith("vmess") ||
                 lower.startsWith("trojan"));
+  }
+
+  // Global Ctrl+V handler — works regardless of focus state (the Focus
+  // widget's onKeyEvent only fires when a descendant has primary focus, which
+  // is rarely the case on desktop before the user clicks something).
+  bool _onGlobalKeyEvent(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (event.logicalKey != LogicalKeyboardKey.keyV) return false;
+    if (!HardwareKeyboard.instance.isControlPressed) return false;
+    // Skip when a text field has focus so normal pasting works.
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus?.context?.widget is EditableText) return false;
+    _onClipboardPasteShortcut();
+    return false;
   }
 
   Future<void> _onClipboardPasteShortcut() async {

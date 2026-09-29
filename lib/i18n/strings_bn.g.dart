@@ -47,6 +47,9 @@ class TranslationsBn with BaseTranslations<AppLocale, Translations> implements T
 	@override late final _Translations$HomeScreen$bn HomeScreen = _Translations$HomeScreen$bn._(_root);
 	@override late final _Translations$LaunchFailedScreen$bn LaunchFailedScreen = _Translations$LaunchFailedScreen$bn._(_root);
 	@override late final _Translations$MyProfilesMergeScreen$bn MyProfilesMergeScreen = _Translations$MyProfilesMergeScreen$bn._(_root);
+	@override late final _Translations$SniScannerScreen$bn SniScannerScreen = _Translations$SniScannerScreen$bn._(_root);
+	@override late final _Translations$CloudflareScannerScreen$bn CloudflareScannerScreen = _Translations$CloudflareScannerScreen$bn._(_root);
+	@override late final _Translations$StatisticsRecordsScreen$bn StatisticsRecordsScreen = _Translations$StatisticsRecordsScreen$bn._(_root);
 	@override late final _Translations$NetCheckScreen$bn NetCheckScreen = _Translations$NetCheckScreen$bn._(_root);
 	@override late final _Translations$NetConnectionsFilterScreen$bn NetConnectionsFilterScreen = _Translations$NetConnectionsFilterScreen$bn._(_root);
 	@override late final _Translations$NetConnectionsScreen$bn NetConnectionsScreen = _Translations$NetConnectionsScreen$bn._(_root);
@@ -194,6 +197,7 @@ class _Translations$DiversionRuleDetectScreen$bn implements Translations$Diversi
 	@override String get title => 'ডাইভারশন রুল শনাক্তকরণ';
 	@override String get rule => 'রুল:';
 	@override String get outbound => 'প্রক্সি সার্ভার:';
+	@override String get ruleSet => 'Rule Set:';
 }
 
 // Path: DiversionRulesScreen
@@ -238,6 +242,8 @@ class _Translations$HomeScreen$bn implements Translations$HomeScreen$en {
 	final TranslationsBn _root; // ignore: unused_field
 
 	// Translations
+	@override String get foreignTunnelBypass => 'Use TUN anyway';
+	@override String foreignTunnel({required Object adapters}) => 'Another VPN\'s tunnel adapter is active (${adapters}). Two full tunnels at once make Windows reset the Wi-Fi adapter, which is what drops the connection for a minute or two. Karing will run through the system proxy instead - turn off the other VPN\'s tunnel to enable Karing\'s.';
 	@override String invalidServer({required Object p}) => '[${p}] আর বৈধ নয়, অনুগ্রহ করে আবার সার্ভার নির্বাচন করুন';
 	@override String disabledServer({required Object p}) => '[${p}] নিষ্ক্রিয় করা হয়েছে, অনুগ্রহ করে আবার সার্ভার নির্বাচন করুন';
 	@override String get expiredServer => 'কোনো সার্ভার উপলব্ধ নেই, প্রোফাইলগুলির মেয়াদ শেষ হতে পারে বা নিষ্ক্রিয় হতে পারে';
@@ -245,6 +251,9 @@ class _Translations$HomeScreen$bn implements Translations$HomeScreen$en {
 	@override String get myLinkEmpty => 'ব্যবহার করার আগে অনুগ্রহ করে [শর্টকাট লিঙ্ক] সেট আপ করুন';
 	@override String tooMuchServers({required Object p, required Object p1}) => 'প্রচুর প্রক্সি সার্ভার [${p}>${p1}], এবং সিস্টেম মেমরি সীমাবদ্ধতার কারণে সংযোগ ব্যর্থ হতে পারে';
 	@override String tooMuchServers2({required Object p, required Object p1}) => 'প্রচুর প্রক্সি সার্ভার [${p}>${p1}] ধীর বা অগম্য সংযোগের কারণ হতে পারে';
+	@override String get serverless => 'Serverless';
+	@override String get sniSpoofing => 'SNI Spoofing';
+	@override String corePortReserved({required Object port}) => 'Windows has reserved local port ${port}, so the connection could not start. Another program (Hyper-V, WSL or Docker) is probably holding it. Restart Windows to free the port, or set a different one in Settings.';
 }
 
 // Path: LaunchFailedScreen
@@ -272,6 +281,95 @@ class _Translations$MyProfilesMergeScreen$bn implements Translations$MyProfilesM
 	@override String get profilesMergeTarget => 'টার্গেট প্রোফাইল';
 	@override String get profilesMergeSource => 'সোর্স প্রোফাইলগুলি';
 	@override String get profilesMergeTips => 'টিপ: সোর্স প্রোফাইলগুলির ডাইভারশন বাতিল করা হবে';
+}
+
+// Path: SniScannerScreen
+class _Translations$SniScannerScreen$bn implements Translations$SniScannerScreen$en {
+	_Translations$SniScannerScreen$bn._(this._root);
+
+	final TranslationsBn _root; // ignore: unused_field
+
+	// Translations
+	@override String get title => 'SNI Scanner';
+	@override String get ipsLabel => 'Clean IPs (comma separated)';
+	@override String get snisLabel => 'SNI candidates (comma separated)';
+	@override String get idle => 'Idle';
+	@override String progress({required Object done, required Object total, required Object working}) => '${done} / ${total} probed · ${working} working';
+	@override String failures({required Object detail}) => 'Failures: ${detail}';
+	@override String get reasonTimeout => 'timeout';
+	@override String get reasonReset => 'reset';
+	@override String get reasonHandshake => 'TLS refused';
+	@override String get reasonUnreachable => 'unreachable';
+	@override String get vpnOn => 'VPN on — probes dial through the core\'s direct scan channel (real path, tunnel bypassed)';
+	@override String get vpnOff => 'VPN off — probes dial directly (real path)';
+	@override String get cdnOnlyHint => 'SNI Spoofing only rewrites CDN nodes (WebSocket / gRPC / HTTPUpgrade). Other nodes are unaffected.';
+	@override String get needInput => 'Add at least one IP and one SNI candidate.';
+	@override String get noResults => 'No working pair found yet.';
+	@override String get startHint => 'Enter clean IPs and SNI candidates, then tap the bolt to scan.';
+	@override String get emptyHint => 'Nothing passed. Every candidate was rejected by the network — see the failure summary above.';
+	@override String verified({required Object colo}) => 'Cloudflare edge · ${colo}';
+	@override String get unverified => 'unverified (not a Cloudflare edge)';
+	@override String applied({required Object sni, required Object count, required Object ms}) => 'Applied: SNI ${sni} with ${count} IP(s), best ${ms} ms. SNI Spoofing enabled — reconnect to apply.';
+	@override String get startTooltip => 'Start scan';
+	@override String get stopTooltip => 'Stop scan';
+	@override String get applyTooltip => 'Apply the best pair to SNI Spoofing';
+	@override String get templateMode => 'Test against my selected node';
+	@override String get templateModeHint => 'Replays your node\'s real request through each IP, so the result proves the IP works for that node — not just that a handshake completed.';
+	@override String get templateUnavailable => 'The selected node is not CDN-backed (WebSocket / gRPC / HTTPUpgrade), so SNI Spoofing does not apply to it.';
+	@override String get templateNoNode => 'No node is selected, so there is no connection shape to replay. Select a node first.';
+	@override String get templateNoTls => 'The selected node does not use TLS, so there is no SNI to spoof. SNI Spoofing needs a TLS connection.';
+	@override String get templateReality => 'The selected node uses REALITY. REALITY already defeats SNI-based blocking on its own, so SNI Spoofing does not apply to it.';
+	@override String get templateNoTransport => 'The selected node is plain TLS with no CDN transport (WebSocket / gRPC / HTTPUpgrade), so there is no Host header to preserve and SNI Spoofing does not apply.';
+}
+
+// Path: CloudflareScannerScreen
+class _Translations$CloudflareScannerScreen$bn implements Translations$CloudflareScannerScreen$en {
+	_Translations$CloudflareScannerScreen$bn._(this._root);
+
+	final TranslationsBn _root; // ignore: unused_field
+
+	// Translations
+	@override String get title => 'Cloudflare Scanner';
+	@override String get probeHostLabel => 'Probe host / SNI to apply (speed.cloudflare.com)';
+	@override String get candidateCountLabel => 'Candidate IPs to sample (default 256)';
+	@override String get invalidInput => 'Probe host must not be empty and count must be 8..4096.';
+	@override String get noHealthy => 'No healthy Cloudflare IP found yet.';
+	@override String get emptyHint => 'Nothing passed. Every candidate failed the Cloudflare trace check — try a different probe host.';
+	@override String replaceDone({required Object count, required Object topN}) => '${count} Cloudflare node(s) now dial the ${topN} fastest clean IPs and the config was applied.\n\nTurn off the Cloudflare card on the home screen to restore the original addresses.';
+	@override String get noCfNodes => 'No Cloudflare nodes detected in your profiles yet.';
+	@override String restoreDone({required Object count}) => 'Original addresses restored for ${count} node(s) and the config was applied.';
+	@override String get nothingToRestore => 'Nothing to restore.';
+	@override String get noCfNodesFound => 'No Cloudflare-labeled nodes found in your profiles.';
+	@override String existingNodes({required Object count}) => 'Existing Cloudflare nodes: ${count}';
+	@override String get test => 'Test';
+	@override String get testing => 'Testing…';
+	@override String get directCoreOn => 'Direct = TLS probe on the real path · Core = delay through the node';
+	@override String get directCoreOff => 'Direct = TLS probe on the real path · Core = requires VPN on';
+	@override String get cleanIpsActive => 'Clean IPs active';
+	@override String get useCleanIps => 'Use clean IPs';
+	@override String get cfNodesDialFastest => 'CF nodes dial the fastest scanned IPs. Tap to undo.';
+	@override String get pointCfNodes => 'Point all CF nodes at the fastest scanned IPs.';
+	@override String get active => 'Active';
+	@override String get replace => 'Replace';
+	@override String healthySaved({required Object count}) => '${count} healthy (saved)';
+	@override String progress({required Object done, required Object total, required Object count}) => '${done} / ${total} probed · ${count} healthy';
+	@override String get vpnOn => 'VPN on — probes dial through the core\'s direct scan channel (real path, tunnel bypassed)';
+	@override String get vpnOff => 'VPN off — probes dial directly (real path)';
+}
+
+// Path: StatisticsRecordsScreen
+class _Translations$StatisticsRecordsScreen$bn implements Translations$StatisticsRecordsScreen$en {
+	_Translations$StatisticsRecordsScreen$bn._(this._root);
+
+	final TranslationsBn _root; // ignore: unused_field
+
+	// Translations
+	@override String get noStatisticsAvailable => 'No statistics available';
+	@override String get total => 'Total';
+	@override String get byDestination => 'By destination';
+	@override String get byApp => 'By app';
+	@override String get unknownDestination => 'Unknown';
+	@override String get enableHint => 'Statistics are off. Turn on Statistics in the settings to start recording.';
 }
 
 // Path: NetCheckScreen
@@ -303,6 +401,11 @@ class _Translations$NetCheckScreen$bn implements Translations$NetCheckScreen$en 
 	@override String hostConnection({required Object p1, required Object p2, required Object p3}) => '[${p1}]\nডাইভারশনরুল:[${p2}]\nপ্রক্সি সার্ভার:[${p3}]';
 	@override String get hostConnectionOk => 'সংযোগ সফল হয়েছে';
 	@override String hostConnectionFailed({required Object p}) => 'সংযোগ ব্যর্থ হয়েছে:[${p}]';
+	@override String get localPort => 'Local Port';
+	@override String localPortOk({required Object p}) => 'Port ${p} is available';
+	@override String localPortInUse({required Object p}) => 'Port ${p} is in use by the app';
+	@override String localPortReserved({required Object p}) => 'Port ${p} is reserved by Windows (Hyper-V / WSL / Docker), so the core cannot start. Restart Windows to free it, or set a different port in Settings.';
+	@override String get vpnNotConnected => 'The VPN is not connected. Start it now to run the full check?\n(Checks run through the VPN core and need it up.)';
 }
 
 // Path: NetConnectionsFilterScreen
@@ -368,6 +471,7 @@ class _Translations$ServerSelectScreen$bn implements Translations$ServerSelectSc
 	@override String get selectRequireEnableIPv6 => 'নির্বাচিত সার্ভারটি একটি IPv6 ঠিকানা এবং এর জন্য [IPv6 সক্ষম করুন] প্রয়োজন';
 	@override String get selectDisabled => 'এই সার্ভারটি নিষ্ক্রিয় করা হয়েছে';
 	@override String get error404 => 'ল্যাটেন্সি শনাক্তকরণে একটি ত্রুটি দেখা দিয়েছে, অনুগ্রহ করে একই বিষয়বস্তু সহ কোনো কনফিগারেশন আছে কিনা তা পরীক্ষা করুন';
+	@override String get noServerSelected => 'No server yet — tap to add a profile';
 }
 
 // Path: SettingsScreen
@@ -377,6 +481,12 @@ class _Translations$SettingsScreen$bn implements Translations$SettingsScreen$en 
 	final TranslationsBn _root; // ignore: unused_field
 
 	// Translations
+	@override String get recommendServerCount => 'Recommended servers';
+	@override String get recommendSortBy => 'Sort recommended by';
+	@override String get sortByLatency => 'Latency';
+	@override String get sortByCost => 'IP lookup time';
+	@override String get foreignTunnelCheck => 'Warn about other VPN tunnels';
+	@override String get foreignTunnelCheckTips => 'Windows resets the Wi-Fi adapter when two tunnels compete for the default route. Turn this off only if the warning is wrong for your setup.';
 	@override String get getTranffic => 'ট্র্যাফিক পান';
 	@override String get tutorial => 'টিউটোরিয়াল';
 	@override String get commonlyUsedRulesets => 'সাধারণত ব্যবহৃত রুল সেট';
@@ -524,6 +634,11 @@ class _Translations$SettingsScreen$bn implements Translations$SettingsScreen$en 
 	@override String get supportUs => 'আমাদের সমর্থন করুন';
 	@override String get rateInApp => 'আমাদের রেট দিন';
 	@override String get rateInAppStore => 'AppStore-এ আমাদের রেট দিন';
+	@override String get dnsEnableFakeIp => 'Enable FakeIP';
+	@override String get dnsEnableProxyResolveByProxy => '[${_root.meta.trafficProxy}] Resolve DNS via Proxy Server';
+	@override String get dnsEnableProxyResolveByProxyTips => 'Resolve the domains of proxied traffic through the connected proxy server instead of locally';
+	@override String get dnsEnableFinalResolveByProxy => '[final] Resolve DNS via Proxy Server';
+	@override String get dnsEnableFinalResolveByProxyTips => 'Resolve the fallback ([final]) DNS through the connected proxy server instead of locally';
 }
 
 // Path: UserAgreementScreen
@@ -827,6 +942,8 @@ class _Translations$meta$bn implements Translations$meta$en {
 	@override String get getProfile => 'প্রোফাইল পান';
 	@override String get addProfile => 'প্রোফাইল যুক্ত করুন';
 	@override String get myProfiles => 'আমার প্রোফাইল';
+	@override String get enableAllProfiles => 'Enable All Profiles';
+	@override String get enableAllProfilesTips => 'Re-enable every disabled profile and server?';
 	@override String get profileEdit => 'প্রোফাইল সম্পাদনা করুন';
 	@override String get profileEditUrlExist => 'URL ইতিমধ্যে বিদ্যমান, অনুগ্রহ করে অন্য একটি URL ব্যবহার করুন';
 	@override String get profileEditReloadAfterProfileUpdate => 'প্রোফাইল আপডেটের পরে পুনরায় লোড করুন';
@@ -1003,6 +1120,7 @@ extension on TranslationsBn {
 			'DiversionRuleDetectScreen.title' => 'ডাইভারশন রুল শনাক্তকরণ',
 			'DiversionRuleDetectScreen.rule' => 'রুল:',
 			'DiversionRuleDetectScreen.outbound' => 'প্রক্সি সার্ভার:',
+			'DiversionRuleDetectScreen.ruleSet' => 'Rule Set:',
 			'DiversionRulesScreen.diversionRulesMatchTips' => 'টিপ: রুলগুলি উপর থেকে নিচে মেলানোর চেষ্টা করুন। যদি কোনো রুল না মেলে, তবে [final] ব্যবহার করুন',
 			'DnsSettingsScreen.ispCanNotEmpty' => 'ISP খালি রাখা যাবে না',
 			'DnsSettingsScreen.urlCanNotEmpty' => 'URL খালি রাখা যাবে না',
@@ -1011,6 +1129,8 @@ extension on TranslationsBn {
 			'FileContentViewerScreen.title' => 'ফাইল কন্টেন্ট ভিউয়ার',
 			'FileContentViewerScreen.clearFileContent' => 'আপনি কি নিশ্চিত যে আপনি ফাইলের বিষয়বস্তু মুছতে চান?',
 			'FileContentViewerScreen.clearFileContentTips' => 'আপনি কি নিশ্চিত যে আপনি প্রোফাইল ফাইলের বিষয়বস্তু মুছতে চান? প্রোফাইল ফাইল মুছলে ডেটা হারানো বা অ্যাপের অস্বাভাবিক কাজ হতে পারে, অনুগ্রহ করে সাবধানে কাজ করুন',
+			'HomeScreen.foreignTunnelBypass' => 'Use TUN anyway',
+			'HomeScreen.foreignTunnel' => ({required Object adapters}) => 'Another VPN\'s tunnel adapter is active (${adapters}). Two full tunnels at once make Windows reset the Wi-Fi adapter, which is what drops the connection for a minute or two. Karing will run through the system proxy instead - turn off the other VPN\'s tunnel to enable Karing\'s.',
 			'HomeScreen.invalidServer' => ({required Object p}) => '[${p}] আর বৈধ নয়, অনুগ্রহ করে আবার সার্ভার নির্বাচন করুন',
 			'HomeScreen.disabledServer' => ({required Object p}) => '[${p}] নিষ্ক্রিয় করা হয়েছে, অনুগ্রহ করে আবার সার্ভার নির্বাচন করুন',
 			'HomeScreen.expiredServer' => 'কোনো সার্ভার উপলব্ধ নেই, প্রোফাইলগুলির মেয়াদ শেষ হতে পারে বা নিষ্ক্রিয় হতে পারে',
@@ -1018,6 +1138,9 @@ extension on TranslationsBn {
 			'HomeScreen.myLinkEmpty' => 'ব্যবহার করার আগে অনুগ্রহ করে [শর্টকাট লিঙ্ক] সেট আপ করুন',
 			'HomeScreen.tooMuchServers' => ({required Object p, required Object p1}) => 'প্রচুর প্রক্সি সার্ভার [${p}>${p1}], এবং সিস্টেম মেমরি সীমাবদ্ধতার কারণে সংযোগ ব্যর্থ হতে পারে',
 			'HomeScreen.tooMuchServers2' => ({required Object p, required Object p1}) => 'প্রচুর প্রক্সি সার্ভার [${p}>${p1}] ধীর বা অগম্য সংযোগের কারণ হতে পারে',
+			'HomeScreen.serverless' => 'Serverless',
+			'HomeScreen.sniSpoofing' => 'SNI Spoofing',
+			'HomeScreen.corePortReserved' => ({required Object port}) => 'Windows has reserved local port ${port}, so the connection could not start. Another program (Hyper-V, WSL or Docker) is probably holding it. Restart Windows to free the port, or set a different one in Settings.',
 			'LaunchFailedScreen.invalidProcess' => 'অ্যাপ শুরু করতে ব্যর্থ হয়েছে [অকার্যকর প্রসেস নাম], অনুগ্রহ করে একটি আলাদা ডিরেক্টরিতে অ্যাপটি পুনরায় ইনস্টল করুন',
 			'LaunchFailedScreen.invalidProfile' => 'অ্যাপ শুরু করতে ব্যর্থ হয়েছে [প্রোফাইল অ্যাক্সেস করতে ব্যর্থ], অনুগ্রহ করে অ্যাপটি পুনরায় ইনস্টল করুন',
 			'LaunchFailedScreen.invalidVersion' => 'অ্যাপ শুরু করতে ব্যর্থ হয়েছে [অকার্যকর সংস্করণ], অনুগ্রহ করে অ্যাপটি পুনরায় ইনস্টল করুন',
@@ -1027,6 +1150,68 @@ extension on TranslationsBn {
 			'MyProfilesMergeScreen.profilesMergeTarget' => 'টার্গেট প্রোফাইল',
 			'MyProfilesMergeScreen.profilesMergeSource' => 'সোর্স প্রোফাইলগুলি',
 			'MyProfilesMergeScreen.profilesMergeTips' => 'টিপ: সোর্স প্রোফাইলগুলির ডাইভারশন বাতিল করা হবে',
+			'SniScannerScreen.title' => 'SNI Scanner',
+			'SniScannerScreen.ipsLabel' => 'Clean IPs (comma separated)',
+			'SniScannerScreen.snisLabel' => 'SNI candidates (comma separated)',
+			'SniScannerScreen.idle' => 'Idle',
+			'SniScannerScreen.progress' => ({required Object done, required Object total, required Object working}) => '${done} / ${total} probed · ${working} working',
+			'SniScannerScreen.failures' => ({required Object detail}) => 'Failures: ${detail}',
+			'SniScannerScreen.reasonTimeout' => 'timeout',
+			'SniScannerScreen.reasonReset' => 'reset',
+			'SniScannerScreen.reasonHandshake' => 'TLS refused',
+			'SniScannerScreen.reasonUnreachable' => 'unreachable',
+			'SniScannerScreen.vpnOn' => 'VPN on — probes dial through the core\'s direct scan channel (real path, tunnel bypassed)',
+			'SniScannerScreen.vpnOff' => 'VPN off — probes dial directly (real path)',
+			'SniScannerScreen.cdnOnlyHint' => 'SNI Spoofing only rewrites CDN nodes (WebSocket / gRPC / HTTPUpgrade). Other nodes are unaffected.',
+			'SniScannerScreen.needInput' => 'Add at least one IP and one SNI candidate.',
+			'SniScannerScreen.noResults' => 'No working pair found yet.',
+			'SniScannerScreen.startHint' => 'Enter clean IPs and SNI candidates, then tap the bolt to scan.',
+			'SniScannerScreen.emptyHint' => 'Nothing passed. Every candidate was rejected by the network — see the failure summary above.',
+			'SniScannerScreen.verified' => ({required Object colo}) => 'Cloudflare edge · ${colo}',
+			'SniScannerScreen.unverified' => 'unverified (not a Cloudflare edge)',
+			'SniScannerScreen.applied' => ({required Object sni, required Object count, required Object ms}) => 'Applied: SNI ${sni} with ${count} IP(s), best ${ms} ms. SNI Spoofing enabled — reconnect to apply.',
+			'SniScannerScreen.startTooltip' => 'Start scan',
+			'SniScannerScreen.stopTooltip' => 'Stop scan',
+			'SniScannerScreen.applyTooltip' => 'Apply the best pair to SNI Spoofing',
+			'SniScannerScreen.templateMode' => 'Test against my selected node',
+			'SniScannerScreen.templateModeHint' => 'Replays your node\'s real request through each IP, so the result proves the IP works for that node — not just that a handshake completed.',
+			'SniScannerScreen.templateUnavailable' => 'The selected node is not CDN-backed (WebSocket / gRPC / HTTPUpgrade), so SNI Spoofing does not apply to it.',
+			'SniScannerScreen.templateNoNode' => 'No node is selected, so there is no connection shape to replay. Select a node first.',
+			'SniScannerScreen.templateNoTls' => 'The selected node does not use TLS, so there is no SNI to spoof. SNI Spoofing needs a TLS connection.',
+			'SniScannerScreen.templateReality' => 'The selected node uses REALITY. REALITY already defeats SNI-based blocking on its own, so SNI Spoofing does not apply to it.',
+			'SniScannerScreen.templateNoTransport' => 'The selected node is plain TLS with no CDN transport (WebSocket / gRPC / HTTPUpgrade), so there is no Host header to preserve and SNI Spoofing does not apply.',
+			'CloudflareScannerScreen.title' => 'Cloudflare Scanner',
+			'CloudflareScannerScreen.probeHostLabel' => 'Probe host / SNI to apply (speed.cloudflare.com)',
+			'CloudflareScannerScreen.candidateCountLabel' => 'Candidate IPs to sample (default 256)',
+			'CloudflareScannerScreen.invalidInput' => 'Probe host must not be empty and count must be 8..4096.',
+			'CloudflareScannerScreen.noHealthy' => 'No healthy Cloudflare IP found yet.',
+			'CloudflareScannerScreen.emptyHint' => 'Nothing passed. Every candidate failed the Cloudflare trace check — try a different probe host.',
+			'CloudflareScannerScreen.replaceDone' => ({required Object count, required Object topN}) => '${count} Cloudflare node(s) now dial the ${topN} fastest clean IPs and the config was applied.\n\nTurn off the Cloudflare card on the home screen to restore the original addresses.',
+			'CloudflareScannerScreen.noCfNodes' => 'No Cloudflare nodes detected in your profiles yet.',
+			'CloudflareScannerScreen.restoreDone' => ({required Object count}) => 'Original addresses restored for ${count} node(s) and the config was applied.',
+			'CloudflareScannerScreen.nothingToRestore' => 'Nothing to restore.',
+			'CloudflareScannerScreen.noCfNodesFound' => 'No Cloudflare-labeled nodes found in your profiles.',
+			'CloudflareScannerScreen.existingNodes' => ({required Object count}) => 'Existing Cloudflare nodes: ${count}',
+			'CloudflareScannerScreen.test' => 'Test',
+			'CloudflareScannerScreen.testing' => 'Testing…',
+			'CloudflareScannerScreen.directCoreOn' => 'Direct = TLS probe on the real path · Core = delay through the node',
+			'CloudflareScannerScreen.directCoreOff' => 'Direct = TLS probe on the real path · Core = requires VPN on',
+			'CloudflareScannerScreen.cleanIpsActive' => 'Clean IPs active',
+			'CloudflareScannerScreen.useCleanIps' => 'Use clean IPs',
+			'CloudflareScannerScreen.cfNodesDialFastest' => 'CF nodes dial the fastest scanned IPs. Tap to undo.',
+			'CloudflareScannerScreen.pointCfNodes' => 'Point all CF nodes at the fastest scanned IPs.',
+			'CloudflareScannerScreen.active' => 'Active',
+			'CloudflareScannerScreen.replace' => 'Replace',
+			'CloudflareScannerScreen.healthySaved' => ({required Object count}) => '${count} healthy (saved)',
+			'CloudflareScannerScreen.progress' => ({required Object done, required Object total, required Object count}) => '${done} / ${total} probed · ${count} healthy',
+			'CloudflareScannerScreen.vpnOn' => 'VPN on — probes dial through the core\'s direct scan channel (real path, tunnel bypassed)',
+			'CloudflareScannerScreen.vpnOff' => 'VPN off — probes dial directly (real path)',
+			'StatisticsRecordsScreen.noStatisticsAvailable' => 'No statistics available',
+			'StatisticsRecordsScreen.total' => 'Total',
+			'StatisticsRecordsScreen.byDestination' => 'By destination',
+			'StatisticsRecordsScreen.byApp' => 'By app',
+			'StatisticsRecordsScreen.unknownDestination' => 'Unknown',
+			'StatisticsRecordsScreen.enableHint' => 'Statistics are off. Turn on Statistics in the settings to start recording.',
 			'NetCheckScreen.title' => 'নেটওয়ার্ক চেক',
 			'NetCheckScreen.warn' => 'দ্রষ্টব্য: নেটওয়ার্ক পরিবেশ এবং ডাইভারশন রুলের প্রভাবের কারণে, পরীক্ষার ফলাফলগুলি বাস্তব ফলাফলের সম্পূর্ণ সমতুল্য নয়।',
 			'NetCheckScreen.invalidDomain' => 'অকার্যকর ডোমেইন নাম',
@@ -1049,6 +1234,11 @@ extension on TranslationsBn {
 			'NetCheckScreen.hostConnection' => ({required Object p1, required Object p2, required Object p3}) => '[${p1}]\nডাইভারশনরুল:[${p2}]\nপ্রক্সি সার্ভার:[${p3}]',
 			'NetCheckScreen.hostConnectionOk' => 'সংযোগ সফল হয়েছে',
 			'NetCheckScreen.hostConnectionFailed' => ({required Object p}) => 'সংযোগ ব্যর্থ হয়েছে:[${p}]',
+			'NetCheckScreen.localPort' => 'Local Port',
+			'NetCheckScreen.localPortOk' => ({required Object p}) => 'Port ${p} is available',
+			'NetCheckScreen.localPortInUse' => ({required Object p}) => 'Port ${p} is in use by the app',
+			'NetCheckScreen.localPortReserved' => ({required Object p}) => 'Port ${p} is reserved by Windows (Hyper-V / WSL / Docker), so the core cannot start. Restart Windows to free it, or set a different port in Settings.',
+			'NetCheckScreen.vpnNotConnected' => 'The VPN is not connected. Start it now to run the full check?\n(Checks run through the VPN core and need it up.)',
 			'NetConnectionsFilterScreen.hostIp' => 'ডোমেইন/IP',
 			'NetConnectionsFilterScreen.app' => 'অ্যাপ',
 			'NetConnectionsFilterScreen.rule' => 'রুল',
@@ -1069,6 +1259,13 @@ extension on TranslationsBn {
 			'ServerSelectScreen.selectRequireEnableIPv6' => 'নির্বাচিত সার্ভারটি একটি IPv6 ঠিকানা এবং এর জন্য [IPv6 সক্ষম করুন] প্রয়োজন',
 			'ServerSelectScreen.selectDisabled' => 'এই সার্ভারটি নিষ্ক্রিয় করা হয়েছে',
 			'ServerSelectScreen.error404' => 'ল্যাটেন্সি শনাক্তকরণে একটি ত্রুটি দেখা দিয়েছে, অনুগ্রহ করে একই বিষয়বস্তু সহ কোনো কনফিগারেশন আছে কিনা তা পরীক্ষা করুন',
+			'ServerSelectScreen.noServerSelected' => 'No server yet — tap to add a profile',
+			'SettingsScreen.recommendServerCount' => 'Recommended servers',
+			'SettingsScreen.recommendSortBy' => 'Sort recommended by',
+			'SettingsScreen.sortByLatency' => 'Latency',
+			'SettingsScreen.sortByCost' => 'IP lookup time',
+			'SettingsScreen.foreignTunnelCheck' => 'Warn about other VPN tunnels',
+			'SettingsScreen.foreignTunnelCheckTips' => 'Windows resets the Wi-Fi adapter when two tunnels compete for the default route. Turn this off only if the warning is wrong for your setup.',
 			'SettingsScreen.getTranffic' => 'ট্র্যাফিক পান',
 			'SettingsScreen.tutorial' => 'টিউটোরিয়াল',
 			'SettingsScreen.commonlyUsedRulesets' => 'সাধারণত ব্যবহৃত রুল সেট',
@@ -1216,6 +1413,11 @@ extension on TranslationsBn {
 			'SettingsScreen.supportUs' => 'আমাদের সমর্থন করুন',
 			'SettingsScreen.rateInApp' => 'আমাদের রেট দিন',
 			'SettingsScreen.rateInAppStore' => 'AppStore-এ আমাদের রেট দিন',
+			'SettingsScreen.dnsEnableFakeIp' => 'Enable FakeIP',
+			'SettingsScreen.dnsEnableProxyResolveByProxy' => '[${_root.meta.trafficProxy}] Resolve DNS via Proxy Server',
+			'SettingsScreen.dnsEnableProxyResolveByProxyTips' => 'Resolve the domains of proxied traffic through the connected proxy server instead of locally',
+			'SettingsScreen.dnsEnableFinalResolveByProxy' => '[final] Resolve DNS via Proxy Server',
+			'SettingsScreen.dnsEnableFinalResolveByProxyTips' => 'Resolve the fallback ([final]) DNS through the connected proxy server instead of locally',
 			'UserAgreementScreen.privacyFirst' => 'আপনার গোপনীয়তা আমাদের কাছে সবার আগে',
 			'UserAgreementScreen.agreeAndContinue' => 'সম্মত হন এবং চালিয়ে যান',
 			'VersionUpdateScreen.versionReady' => ({required Object p}) => 'নতুন সংস্করণ [${p}] প্রস্তুত',
@@ -1401,6 +1603,8 @@ extension on TranslationsBn {
 			'meta.noProfileGotAutoBackup' => 'যদি [${_root.meta.myProfiles}] এর মতো ডেটা হারিয়ে যায়, তবে আপনি এটি [${_root.meta.backupAndSync}-${_root.meta.autoBackup}] বা অন্যান্য ব্যাকআপ উৎস (যেমন iCloud বা Webdav ইত্যাদি) থেকে পুনরুদ্ধার করতে পারেন',
 			'meta.autoBackupAddProfile' => 'প্রোফাইল যুক্ত করার পরে',
 			'meta.autoBackupRemoveProfile' => 'প্রোফাইল মুছে ফেলার পরে',
+			_ => null,
+		} ?? switch (path) {
 			'meta.profile' => 'প্রোফাইল',
 			'meta.currentProfile' => 'বর্তমান প্রোফাইল',
 			'meta.importAndExport' => 'আমদানি এবং রপ্তানি',
@@ -1466,6 +1670,8 @@ extension on TranslationsBn {
 			'meta.getProfile' => 'প্রোফাইল পান',
 			'meta.addProfile' => 'প্রোফাইল যুক্ত করুন',
 			'meta.myProfiles' => 'আমার প্রোফাইল',
+			'meta.enableAllProfiles' => 'Enable All Profiles',
+			'meta.enableAllProfilesTips' => 'Re-enable every disabled profile and server?',
 			'meta.profileEdit' => 'প্রোফাইল সম্পাদনা করুন',
 			'meta.profileEditUrlExist' => 'URL ইতিমধ্যে বিদ্যমান, অনুগ্রহ করে অন্য একটি URL ব্যবহার করুন',
 			'meta.profileEditReloadAfterProfileUpdate' => 'প্রোফাইল আপডেটের পরে পুনরায় লোড করুন',
@@ -1486,8 +1692,6 @@ extension on TranslationsBn {
 			'meta.profileAddNoServerAvaliable' => 'কোনো সার্ভার উপলব্ধ নেই, নিশ্চিত করুন যে প্রোফাইল লিঙ্ক বা প্রোফাইল ফাইলটি বৈধ; যদি আপনার প্রোফাইল GitHub থেকে হয়, তবে অনুগ্রহ করে পৃষ্ঠার [Raw] বাটনের মাধ্যমে লিঙ্কটি পান',
 			'meta.profileAddWrapSuccess' => 'প্রোফাইল সফলভাবে তৈরি হয়েছে, অনুগ্রহ করে দেখার জন্য [${_root.meta.myProfiles}]-এ যান',
 			'diversionRulesKeep' => '[${_root.meta.isp}] এর [${_root.meta.diversionRules}] বজায় রাখুন',
-			_ => null,
-		} ?? switch (path) {
 			'diversionCustomGroupPreset' => 'প্রিসেট [${_root.meta.diversionCustomGroup}]',
 			'diversionCustomGroupPresetTips' => 'দ্রষ্টব্য: সক্ষম করা আইটেমগুলি [${_root.meta.diversionCustomGroup}] এবং [${_root.meta.diversionRules}]-এ যুক্ত/ওভাররাইট করা হবে',
 			'diversionCustomGroupAddTips' => 'দ্রষ্টব্য: যুক্ত করার পরে, আপনাকে ম্যানুয়ালি ক্রম সামঞ্জস্য করতে হতে পারে, অন্যথায় নতুন যুক্ত করা ডাইভারশন কার্যকর নাও হতে পারে',

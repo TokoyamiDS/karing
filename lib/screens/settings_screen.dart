@@ -748,8 +748,8 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
             switchOptions: GroupItemSwitchOptions(
               name: "Serverless (Iran)",
               tips: "patterniha/Serverless-for-Iran: no proxy server. "
-                  "All TLS fragmented, QUIC blocked, UDP noise. "
-                  "Iranian sites stay direct.",
+                  "TLS fragmented, QUIC and UDP/443 blocked, "
+                  "everything else direct. Iranian sites stay direct.",
               switchValue: settingConfig.tls.enableServerless,
               onSwitch: (bool value) async {
                 settingConfig.tls.enableServerless = value;

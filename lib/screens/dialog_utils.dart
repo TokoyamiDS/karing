@@ -131,6 +131,8 @@ class DialogUtils {
     String text, {
     bool showCopy = false,
     bool withVersion = false,
+    String? okText,
+    String? cancelText,
   }) async {
     if (!context.mounted) {
       return null;
@@ -163,7 +165,7 @@ class DialogUtils {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ElevatedButton(
-                  child: Text(tcontext.meta.cancel),
+                  child: Text(cancelText ?? tcontext.meta.cancel),
                   onPressed: () {
                     if (!context.mounted) {
                       return;
@@ -173,7 +175,7 @@ class DialogUtils {
                 ),
                 const SizedBox(width: 60),
                 ElevatedButton(
-                  child: Text(tcontext.meta.ok),
+                  child: Text(okText ?? tcontext.meta.ok),
                   onPressed: () {
                     if (!context.mounted) {
                       return;

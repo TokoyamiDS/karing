@@ -250,6 +250,19 @@ class SettingConfigItemUIScreen {
   bool sortServerMyProfiles = false;
   bool sortServerSelectServer = false;
   bool sortServerDiversionRules = false;
+
+  /// How many nodes the "Recommended" strip shows, best first.
+  int recommendServerCount = kRecommendServerCountDefault;
+
+  /// What "best" means there: `latency` (the delay test) or `cost` (how long
+  /// the exit-IP lookup took). Both are milliseconds, so they are not
+  /// interchangeable — a node can answer the delay probe quickly and still be
+  /// slow to complete the geoip request.
+  String recommendSortBy = kRecommendSortByLatency;
+  static const String kRecommendSortByLatency = "latency";
+  static const String kRecommendSortByCost = "cost";
+  static const int kRecommendServerCountDefault = 3;
+  static const int kRecommendServerCountMax = 20;
   bool selectServerHideRecommand = false;
   bool selectServerHideRecent = false;
   bool selectServerHideFav = false;
@@ -269,6 +282,8 @@ class SettingConfigItemUIScreen {
     'sort_server_my_profiles': sortServerMyProfiles,
     'sort_server_select_server': sortServerSelectServer,
     'sort_server_diversion_rules': sortServerDiversionRules,
+    'recommend_server_count': recommendServerCount,
+    'recommend_sort_by': recommendSortBy,
     'select_server_hide_recommand': selectServerHideRecommand,
     'select_server_hide_recent': selectServerHideRecent,
     'select_server_hide_fav': selectServerHideFav,
@@ -303,6 +318,14 @@ class SettingConfigItemUIScreen {
     sortServerMyProfiles = map["sort_server_my_profiles"] ?? false;
     sortServerSelectServer = map["sort_server_select_server"] ?? false;
     sortServerDiversionRules = map["sort_server_diversion_rules"] ?? false;
+    recommendServerCount = map["recommend_server_count"] ??
+        SettingConfigItemUIScreen.kRecommendServerCountDefault;
+    if (recommendServerCount < 1 ||
+        recommendServerCount > SettingConfigItemUIScreen.kRecommendServerCountMax) {
+      recommendServerCount = SettingConfigItemUIScreen.kRecommendServerCountDefault;
+    }
+    recommendSortBy =
+        map["recommend_sort_by"] ?? SettingConfigItemUIScreen.kRecommendSortByLatency;
     selectServerHideRecommand = map["select_server_hide_recommand"] ?? false;
     selectServerHideRecent = map["select_server_hide_recent"] ?? false;
     selectServerHideFav = map["select_server_hide_fav"] ?? false;
@@ -508,6 +531,13 @@ class SettingConfigItemTUN {
       getAppendHttp(); //android, ios: some apps skip tun route
   List<String> allowBypassHttpProxyDomains = ProxyBypassDoaminsDefault.toList();
   bool hijackDns = true;
+
+  /// Skip the "another VPN already owns a tunnel" check.
+  ///
+  /// That check can false-positive, and without an escape hatch a wrong
+  /// detection would lock the user out of TUN mode with no way back — so the
+  /// warning dialog offers Bypass, which sets this and proceeds.
+  bool ignoreForeignTunnel = false;
   String loopbackAddress = "";
   List<String> routeExcludeAddress = [];
 
@@ -534,6 +564,7 @@ class SettingConfigItemTUN {
       'append_http_proxy': appendHttpProxy,
       'allow_bypass_httpproxy_domains': allowBypassHttpProxyDomains,
       'hijack_dns': hijackDns,
+      'ignore_foreign_tunnel': ignoreForeignTunnel,
       'loopback_address': loopbackAddress,
       'route_exclude_address': routeExcludeAddress,
     };
@@ -594,6 +625,7 @@ class SettingConfigItemTUN {
       ProxyBypassDoaminsDefault.toList(),
     )!;
     hijackDns = map["hijack_dns"] ?? true;
+    ignoreForeignTunnel = map["ignore_foreign_tunnel"] ?? false;
     loopbackAddress = map["loopback_address"] ?? "";
     if (!NetworkUtils.isIpv4(loopbackAddress) &&
         !NetworkUtils.isIpv6(loopbackAddress)) {
@@ -725,6 +757,17 @@ class SettingConfigItemDNS {
   bool enableInboundDomainResolve = false;
   bool enableStaticIP = false;
   bool enableStaticIPForResolver = true;
+
+  /// Per-purpose switches that older builds exposed as their own toggles and
+  /// which [proxyResolveMode] folded into a single dropdown. Kept as real,
+  /// independently settable flags: they are read from existing config files
+  /// (see the migration in [fromJson]) and now drive the config builder
+  /// additively, so a user who wants the old three-way control gets it back
+  /// without the dropdown losing its meaning.
+  bool enableFakeIp = false;
+  bool enableProxyResolveByProxy = false;
+  bool enableFinalResolveByProxy = false;
+
   SettingConfigItemDNSProxyResolveMode proxyResolveMode =
       SettingConfigItemDNSProxyResolveMode.fakeip;
 
@@ -739,6 +782,20 @@ class SettingConfigItemDNS {
   Map<String, List<String>> staticIPs = {};
   List<dynamic> list = [];
 
+  /// Brings the three per-purpose switches back into step with the
+  /// consolidated [proxyResolveMode]. Call this whenever the mode changes:
+  /// the switches are additive in the config builder, so one left on from a
+  /// previous mode would keep forcing its behaviour and the dropdown would
+  /// look broken — pick `direct` and DNS would still detour.
+  void syncResolveFlagsToMode() {
+    enableFakeIp =
+        proxyResolveMode == SettingConfigItemDNSProxyResolveMode.fakeip;
+    enableProxyResolveByProxy =
+        proxyResolveMode == SettingConfigItemDNSProxyResolveMode.proxy;
+    enableFinalResolveByProxy =
+        proxyResolveMode == SettingConfigItemDNSProxyResolveMode.proxy;
+  }
+
   Map<String, dynamic> toJson() {
     Map<String, dynamic> ret = {
       'ttl': ttl.inSeconds,
@@ -748,6 +805,9 @@ class SettingConfigItemDNS {
       'enable_inbound_domain_resolve': enableInboundDomainResolve,
       'enable_static_ip': enableStaticIP,
       'enable_static_ip_for_resolver': enableStaticIPForResolver,
+      'enable_fake_ip': enableFakeIp,
+      'enable_proxy_resolve_by_proxy': enableProxyResolveByProxy,
+      'enable_final_resolve_by_proxy': enableFinalResolveByProxy,
       'proxy_resolve_mode': proxyResolveMode.name,
       'resolver_addresses': _resolver,
       'outbound_addresses': _outbound,
@@ -783,6 +843,16 @@ class SettingConfigItemDNS {
     enableInboundDomainResolve = map["enable_inbound_domain_resolve"] ?? false;
     enableStaticIP = map["enable_static_ip"] ?? false;
     enableStaticIPForResolver = map["enable_static_ip_for_resolver"] ?? true;
+    // A config saved by an older build carries the three per-purpose flags; a
+    // newer one carries only the consolidated mode. Read whichever is present
+    // and derive the other, so the switches and the dropdown never disagree
+    // on first load.
+    final hasLegacyResolveFlags = map.containsKey("enable_fake_ip") ||
+        map.containsKey("enable_proxy_resolve_by_proxy") ||
+        map.containsKey("enable_final_resolve_by_proxy");
+    enableFakeIp = map["enable_fake_ip"] ?? false;
+    enableProxyResolveByProxy = map["enable_proxy_resolve_by_proxy"] ?? false;
+    enableFinalResolveByProxy = map["enable_final_resolve_by_proxy"] ?? false;
     String? proxyResolveMode_ = map["proxy_resolve_mode"];
     if (proxyResolveMode_ == null) {
       do {
@@ -811,6 +881,11 @@ class SettingConfigItemDNS {
       proxyResolveMode = SettingConfigItemDNSProxyResolveMode.fakeip;
     } else {
       proxyResolveMode = SettingConfigItemDNSProxyResolveMode.fakeip;
+    }
+    if (!hasLegacyResolveFlags) {
+      // A config saved by a newer build carries only the mode. Mirror it into
+      // the switches so the two controls cannot disagree on first load.
+      syncResolveFlagsToMode();
     }
 
     _resolver = ConvertUtils.getListStringFromDynamic(
@@ -926,52 +1001,6 @@ class SettingConfigItemDNS {
     _resolver = dns;
   }
 
-  /// Replaces unreachable-from-Iran CN DNS lists with working ones.
-  /// Runs at every init for regionCode=ir so stale saved lists heal
-  /// themselves (user may have reset settings or restored a backup).
-  static const List<String> kDnsListIr = [
-    "udp://78.157.42.100",
-    "udp://8.8.8.8",
-    "udp://1.1.1.1",
-  ];
-
-  void migrateDnsForIr() {
-    const ir = kDnsListIr;
-    if (_resolver.length != ir.length || !_resolverEveryMatches(ir)) {
-      _resolver = ir.toList();
-    }
-    if (_outbound.length != ir.length || !_outboundEveryMatches(ir)) {
-      _outbound = ir.toList();
-    }
-    if (_direct.length != ir.length || !_directEveryMatches(ir)) {
-      _direct = ir.toList();
-    }
-    if (_proxy.isEmpty || _proxy.first.contains("223.") || _proxy.first.contains("1.12.")) {
-      _proxy = ir.toList();
-    }
-  }
-
-  bool _resolverEveryMatches(List<String> ir) {
-    for (final u in _resolver) {
-      if (!ir.contains(u)) return false;
-    }
-    return true;
-  }
-
-  bool _outboundEveryMatches(List<String> ir) {
-    for (final u in _outbound) {
-      if (!ir.contains(u)) return false;
-    }
-    return true;
-  }
-
-  bool _directEveryMatches(List<String> ir) {
-    for (final u in _direct) {
-      if (!ir.contains(u)) return false;
-    }
-    return true;
-  }
-
   void setOutboundDns(List<String> dns) {
     _outbound = dns;
   }
@@ -1021,13 +1050,6 @@ class SettingConfigItemDNS {
       return _updateDns(_outbound, tunMode);
     }
 
-    if (regioncode.toLowerCase() == "ir") {
-      _outbound.add("udp://78.157.42.100");
-      _outbound.add("udp://8.8.8.8");
-      _outbound.add("udp://1.1.1.1");
-      return _updateDns(_outbound, tunMode);
-    }
-
     _outbound.add(SettingConfigItemDNS.kDNSLocal);
     if (!Platform.isAndroid) {
       _outbound.add(SettingConfigItemDNS.kDNSDHCP);
@@ -1042,13 +1064,6 @@ class SettingConfigItemDNS {
 
   List<String> getDirectDns(String regioncode, bool tunMode) {
     if (_direct.isNotEmpty) {
-      return _updateDns(_direct, tunMode);
-    }
-
-    if (regioncode.toLowerCase() == "ir") {
-      _direct.add("udp://78.157.42.100");
-      _direct.add("udp://8.8.8.8");
-      _direct.add("udp://1.1.1.1");
       return _updateDns(_direct, tunMode);
     }
 
@@ -1085,11 +1100,6 @@ class SettingConfigItemDNS {
     _resolver.add(SettingConfigItemDNS.kDNSLocal);
     if (!Platform.isAndroid) {
       _resolver.add(SettingConfigItemDNS.kDNSDHCP);
-    }
-    if (regioncode.toLowerCase() == "ir") {
-      _resolver.add("udp://78.157.42.100");
-      _resolver.add("udp://8.8.8.8");
-      return _updateDns(_resolver, tunMode);
     }
     _resolver.add("https://1.1.1.1/dns-query");
     _resolver.add("https://8.8.8.8/dns-query");
@@ -1155,10 +1165,10 @@ class SettingConfigItemTLS {
   /// Last Cloudflare scanner results, "ip|latencyMs|colo" per entry.
   List<String> cfScanResults = [];
 
-  /// Serverless mode (patterniha/Serverless-for-Iran): no proxy server —
-  /// direct connections with DPI-defeating fragmentation + UDP noise.
+  /// Serverless mode (patterniha/Serverless-for-Iran v50): no proxy server -
+  /// direct connections whose TLS ClientHello is fragmented, with QUIC and
+  /// UDP/443 blocked. Masks and rules are emitted by the config builder.
   bool enableServerless = false;
-  bool serverlessLowDelay = true;
 
   Map<String, dynamic> toJson() {
     Map<String, dynamic> ret = {
@@ -1174,7 +1184,6 @@ class SettingConfigItemTLS {
       'sni_spoofing_fake_sni': sniSpoofingFakeSni,
       'cf_scan_results': cfScanResults,
       'enable_serverless': enableServerless,
-      'serverless_low_delay': serverlessLowDelay,
     };
     return ret;
   }
@@ -1212,7 +1221,6 @@ class SettingConfigItemTLS {
       cfScanResults = cfResults;
     }
     enableServerless = map["enable_serverless"] ?? false;
-    serverlessLowDelay = map["serverless_low_delay"] ?? true;
   }
 
   static SettingConfigItemTLS fromJsonStatic(Map<String, dynamic>? map) {
@@ -1282,10 +1290,20 @@ class SettingConfigItemProxy {
   static const String hostLocal = '127.0.0.1';
   static const String hostNetwork = '0.0.0.0';
 
-  static int controlPortDefault = 3057;
-  static int kMixedDirectPortDefault = 3065;
-  static int kMixedForwardPortDefault = 3066;
-  static int kMixedPortDefault = 3067;
+  // These sit OUTSIDE the Windows ephemeral port range on purpose.
+  //
+  // That range is 49152-65535 by default, but tunnelling and VPN tooling often
+  // widen it downwards — one machine had 1024-15000, which swallowed every port
+  // the app used (3050-3068, 4065-4067). Any outgoing connection on the system
+  // could then be handed one of them, so the ports read as "always in use" with
+  // no process to blame, and the core died on a bind error that looked like a
+  // permissions problem. 15400+ is clear of both the default range and a widened
+  // one, and clear of the WinNAT/Hyper-V reserved blocks seen in practice.
+  static int controlPortDefault = 15401;
+  static int kMixedDirectPortDefault = 15402;
+  static int kMixedForwardPortDefault = 15403;
+  static int kMixedPortDefault = 15404;
+  static int kScanPortDefault = 15405;
 
   /// Dev builds placed next to a "portable" dir run isolated: shifted ports
   /// avoid clashing with an installed stable Karing (same profile dir there).
@@ -1308,11 +1326,13 @@ class SettingConfigItemProxy {
       devPortable ? kMixedDirectPortDefault + 100 : kMixedDirectPortDefault;
   static int get kMixedForwardPortDefaultEffective =>
       devPortable ? kMixedForwardPortDefault + 100 : kMixedForwardPortDefault;
+  static int get kScanPortDefaultEffective =>
+      devPortable ? kScanPortDefault + 100 : kScanPortDefault;
 
-  static int mixedDirectNetSharePortDefault = 4065;
-  static int kMixedForwardNetSharePortDefault = 4066;
-  static int kMixedNetSharePortDefault = 4067;
-  static int clusterPortDefault = 3050;
+  static int mixedDirectNetSharePortDefault = 15406;
+  static int kMixedForwardNetSharePortDefault = 15407;
+  static int kMixedNetSharePortDefault = 15408;
+  static int clusterPortDefault = 15400;
 
   String host = hostLocal;
   bool enableCluster = false;
@@ -1322,6 +1342,7 @@ class SettingConfigItemProxy {
   int mixedDirectPort = SettingConfigItemProxy.kMixedDirectPortDefaultEffective;
   int mixedForwardPort =
       SettingConfigItemProxy.kMixedForwardPortDefaultEffective;
+  int scanPort = SettingConfigItemProxy.kScanPortDefaultEffective;
   int mixedRuleNetSharePort = kMixedNetSharePortDefault;
   int mixedForwardNetSharePort = kMixedForwardNetSharePortDefault;
   int controlPort = SettingConfigItemProxy.controlPortDefaultEffective;
@@ -1367,6 +1388,7 @@ class SettingConfigItemProxy {
     'mixed_port': mixedRulePort,
     'mixed_direct_port': mixedDirectPort,
     'mixed_forword_port': mixedForwardPort,
+    'scan_port': scanPort,
     'mixed_net_share_port': mixedRuleNetSharePort,
     'mixed_forword_net_share_port': mixedForwardNetSharePort,
     'control_port': controlPort,
@@ -1392,6 +1414,7 @@ class SettingConfigItemProxy {
     mixedRulePort = map["mixed_port"] ?? 0;
     mixedDirectPort = map["mixed_direct_port"] ?? 0;
     mixedForwardPort = map["mixed_forword_port"] ?? 0;
+    scanPort = map["scan_port"] ?? 0;
     mixedRuleNetSharePort = map["mixed_net_share_port"] ?? 0;
     mixedForwardNetSharePort = map["mixed_forword_net_share_port"] ?? 0;
     controlPort = map["control_port"] ?? 0;
@@ -1402,6 +1425,7 @@ class SettingConfigItemProxy {
       mixedRulePort = 0;
       mixedDirectPort = 0;
       mixedForwardPort = 0;
+      scanPort = 0;
       controlPort = 0;
     }
 
@@ -1414,6 +1438,20 @@ class SettingConfigItemProxy {
     if (mixedForwardPort == 0) {
       mixedForwardPort = kMixedForwardPortDefaultEffective;
     }
+    // The scan inbound must never share a port with a mixed inbound. It is bound
+    // to loopback on the same number and routed straight to `direct`, so it
+    // shadows the mixed inbound for every loopback client — which is how the
+    // app's own exit-IP lookups silently came back with the *direct* IP instead
+    // of the node's. Resetting to the default is not enough: the user can move
+    // mixedPort onto that very number, so keep advancing until it is clear.
+    if (scanPort == 0 ||
+        scanPort == mixedRulePort ||
+        scanPort == mixedForwardPort) {
+      scanPort = kScanPortDefaultEffective;
+      while (scanPort == mixedRulePort || scanPort == mixedForwardPort) {
+        scanPort++;
+      }
+    }
     if (mixedRuleNetSharePort == 0) {
       mixedRuleNetSharePort = kMixedNetSharePortDefault;
     }
@@ -1423,6 +1461,23 @@ class SettingConfigItemProxy {
     }
     if (controlPort == 0) {
       controlPort = controlPortDefaultEffective;
+    }
+    // Same hazard as the scan port above: two of the app's own listeners on one
+    // number means the core cannot start at all, and the bind error reads like a
+    // permissions problem rather than a clash. The defaults are distinct, but a
+    // user who moves `mixed_port` can land on the control port just as easily as
+    // on the scan port — which is exactly how the scan collision happened.
+    if (controlPort == mixedRulePort ||
+        controlPort == mixedDirectPort ||
+        controlPort == mixedForwardPort ||
+        controlPort == scanPort) {
+      controlPort = controlPortDefaultEffective;
+      while (controlPort == mixedRulePort ||
+          controlPort == mixedDirectPort ||
+          controlPort == mixedForwardPort ||
+          controlPort == scanPort) {
+        controlPort++;
+      }
     }
     if (clusterPort == 0) {
       clusterPort = clusterPortDefault;
@@ -2070,7 +2125,7 @@ class SettingConfig {
   }
 
   static int maxLatencyCheckConcurrency() {
-    return PlatformUtils.isPC() ? 20 : 10;
+    return PlatformUtils.isPC() ? 30 : 10;
   }
 }
 
@@ -2085,9 +2140,6 @@ class SettingManager {
       if (!Platform.isWindows) {
         _config.tun.enable = true;
       }
-    }
-    if (_config.iranMode) {
-      _config.dns.migrateDnsForIr();
     }
 
     bool needSave = await parseConfig();
@@ -2184,6 +2236,69 @@ class SettingManager {
 
   static SettingConfig getConfig() {
     return _config;
+  }
+
+  /// Moves any port the core is about to bind if it is not actually usable.
+  ///
+  /// A port can be unavailable with no process holding it: inside the system's
+  /// ephemeral range it may be in use as the local end of an unrelated outgoing
+  /// connection, and inside a WinNAT/Hyper-V reserved block Windows refuses it
+  /// outright. Both surface only as a bind failure, which kills the core with a
+  /// message that reads like a permissions problem. Checking first turns a hard
+  /// failure into a port shift.
+  ///
+  /// Called only for the runtime config — an exported config is meant to run
+  /// elsewhere and must keep the ports the user chose.
+  static Future<void> ensureCorePortsAvailable() async {
+    // Windows only. The failure this guards against is Windows-specific — a port
+    // sitting inside a WinNAT/Hyper-V reserved block, or held by a previous core
+    // instance, and Windows then refusing the bind.
+    //
+    // On Android the same probing is actively harmful: the running core already
+    // holds these ports, so every start would fail to claim them, shift them, and
+    // save the new values. The core ends up configured on ports the rest of the
+    // start-up path does not expect, and TUN stops coming up.
+    if (!Platform.isWindows) {
+      return;
+    }
+    final proxy = _config.proxy;
+    final taken = <int>{};
+    final moved = <String>[];
+
+    Future<int> claim(String name, int preferred) async {
+      var port = preferred;
+      for (var i = 0; i < 200; i++, port++) {
+        if (taken.contains(port)) {
+          continue;
+        }
+        try {
+          final socket = await ServerSocket.bind(
+            InternetAddress.loopbackIPv4,
+            port,
+          );
+          await socket.close();
+          taken.add(port);
+          if (port != preferred) {
+            moved.add("$name $preferred->$port");
+          }
+          return port;
+        } catch (_) {
+          // In use, or reserved. Either way the core could not bind it.
+        }
+      }
+      taken.add(preferred);
+      return preferred;
+    }
+
+    proxy.mixedRulePort = await claim("mixed", proxy.mixedRulePort);
+    proxy.mixedForwardPort = await claim("forward", proxy.mixedForwardPort);
+    proxy.scanPort = await claim("scan", proxy.scanPort);
+    proxy.controlPort = await claim("control", proxy.controlPort);
+
+    if (moved.isNotEmpty) {
+      Log.w("ensureCorePortsAvailable: moved ${moved.join(', ')}");
+      await save();
+    }
   }
 
   static void reset() {

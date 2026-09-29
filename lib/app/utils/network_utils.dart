@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:punycode_converter/punycode_converter.dart' as punycode;
 import 'package:karing/app/runtime/return_result.dart';
+import 'package:karing/app/utils/emoji_utils.dart';
 import 'package:tuple/tuple.dart';
 
 class NetInterfacesInfo {
@@ -295,6 +296,141 @@ class NetworkUtils {
       } catch (_) {}
     }
     return 0;
+  }
+
+  /// Name fragments used by other tunnelling clients' adapters.
+  ///
+  /// Deliberately specific. A false positive refuses to start a perfectly good
+  /// tunnel, so "Ethernet", "vEthernet" and the VMware adapters must not match.
+  static const List<String> _foreignTunnelHints = [
+    "tun",
+    "tap",
+    "wintun",
+    "wireguard",
+    "openvpn",
+    "nebula",
+    "zerotier",
+    "tailscale",
+    "radmin",
+    "sing-box",
+    "clash",
+    "v2ray",
+    "xray",
+    "hiddify",
+    "nekoray",
+    "proton",
+  ];
+
+  /// The adapter this app's own core creates, so it is never mistaken for a
+  /// foreign tunnel. Matches `SingboxInboundTunOptions.interfaceName`.
+  static const String kOwnTunnelInterface = "karing";
+
+  /// Whether [interfaceName] belongs to a foreign tunnelling client.
+  ///
+  /// Exposed so the heuristic can be tested: a false positive refuses to start
+  /// a perfectly good tunnel, and a false negative lets two tunnels fight.
+  static bool isForeignTunnelName(String interfaceName) {
+    final name = interfaceName.toLowerCase();
+    if (name == kOwnTunnelInterface) {
+      return false;
+    }
+    return _foreignTunnelHints.any(name.contains);
+  }
+
+  /// Tunnel adapters belonging to **another** client, if any.
+  ///
+  /// Two full-tunnel clients each install their own default route and each
+  /// rewrite DNS. Windows then decides connectivity is lost and resets the WLAN
+  /// adapter — which is experienced as "the WiFi crashed and I had to wait for
+  /// the driver to come back". Not adding a second tunnel is the only part of
+  /// that we can control from inside the app.
+  ///
+  /// Only adapters that are actually up appear here, so a disconnected
+  /// competitor is correctly ignored.
+  static Future<List<String>> findForeignTunnels() async {
+    final found = <String>[];
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        includeLinkLocal: true,
+      );
+      for (final item in interfaces) {
+        if (isForeignTunnelName(item.name)) {
+          found.add(item.name);
+        }
+      }
+    } catch (err) {}
+    return found;
+  }
+
+  static Future<bool> hasForeignTunnel() async =>
+      (await findForeignTunnels()).isNotEmpty;
+
+  /// Parses an exit-IP lookup body into `(ip, countryCode)`.
+  ///
+  /// Cloudflare's `cdn-cgi/trace` answers plain `ip=…` / `loc=…` lines; anything
+  /// else is treated as the older JSON shape, and a bare address is taken as-is.
+  /// Extracted so both shapes are covered by tests — a slip here silently blanks
+  /// the location for every node, which reads as "the feature is broken" rather
+  /// than as a parse bug.
+  static Tuple2<String, String> parseOutletIpBody(String body) {
+    final text = body.trim();
+    if (text.isEmpty) {
+      return const Tuple2("", "");
+    }
+    if (text.contains('ip=')) {
+      var ip = "";
+      var region = "";
+      for (final line in text.split('\n')) {
+        final split = line.indexOf('=');
+        if (split <= 0) {
+          continue;
+        }
+        final key = line.substring(0, split).trim();
+        final value = line.substring(split + 1).trim();
+        if (key == 'ip') {
+          ip = value;
+        } else if (key == 'loc') {
+          region = value;
+        }
+      }
+      return Tuple2(ip, region);
+    }
+    try {
+      final geo = jsonDecode(text);
+      if (geo is Map) {
+        return Tuple2(
+          geo["ip"]?.toString() ?? "",
+          geo["country_code"]?.toString() ?? "",
+        );
+      }
+    } catch (_) {}
+    return Tuple2(text, "");
+  }
+
+  /// The inline exit-location label shared by the server list and the home
+  /// widget, e.g. `🇩🇪 203.0.113.9 (320ms)`.
+  ///
+  /// [costMs] is how long the lookup took. While it is unknown the slot shows
+  /// `(*)` rather than being omitted — the address is real, but a value whose
+  /// cost was never measured must not be presented as measured.
+  static String outletLabel(String region, String ip, int costMs) {
+    final address = "${EmojiUtils.countryCodeToEmoji(region)} $ip".trim();
+    if (address.isEmpty) {
+      return "";
+    }
+    return "$address (${outletCost(costMs)})";
+  }
+
+  /// How long the exit-IP lookup took: `(*)` when it was never measured.
+  static String outletCost(int costMs) {
+    if (costMs <= 0) {
+      return "*";
+    }
+    if (costMs < 1000) {
+      return "${costMs}ms";
+    }
+    return "${(costMs / 1000).toStringAsFixed(1)}s";
   }
 
   static Future<Tuple2<IpInfo?, String>> getOutletIp(

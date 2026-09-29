@@ -5,12 +5,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:karing/app/local_services/vpn_service.dart';
-import 'package:karing/app/modules/biz.dart';
 import 'package:karing/app/modules/server_manager.dart';
 import 'package:karing/app/modules/setting_manager.dart';
 import 'package:karing/app/runtime/return_result.dart';
 
 import 'package:karing/app/utils/parallel_task_queue.dart';
+import 'package:karing/app/utils/scan_dialer.dart';
 import 'package:karing/app/utils/singbox_config_builder.dart';
 import 'package:karing/i18n/strings.g.dart';
 import 'package:karing/screens/common_widget.dart';
@@ -197,19 +197,16 @@ class _DnsSettingsScreenState extends LasyRenderingState<DnsSettingsScreen> {
     );
   }
 
-  Future<bool> startVPN() async {
-    return await Biz.startOrRestartIfDirtyVPN(context, "DnsSettingsScreen");
-  }
-
   void checkLatency() async {
-    bool ok = await startVPN();
-    if (!ok) {
-      return;
+    // No VPN required: the direct column is probed straight on the physical
+    // NIC. When the core is up, wait for it and also measure the "current"
+    // (proxy detour) column through it.
+    if (await VPNService.getStarted()) {
+      await ScanDialer.waitCoreReady();
+      if (!mounted) {
+        return;
+      }
     }
-    if (!mounted) {
-      return;
-    }
-
     if (_taskQueue != null) {
       return;
     }
@@ -283,43 +280,39 @@ class _DnsSettingsScreenState extends LasyRenderingState<DnsSettingsScreen> {
     _taskQueue ??= ParallelTaskQueue(
       (url) async {
         bool started = await VPNService.getStarted();
-        if (started) {
-          if (url == SettingConfigItemDNS.kDNSLocal ||
-              url == SettingConfigItemDNS.kDNSDHCP) {
-            ReturnResult<int> resultDirect =
-                await ServerManager.testDNSConnectLatency(
-                  [url],
-                  detourDirect,
-                  null,
-                );
-            if (resultDirect.error != null) {
-              contectDirectLatency[url] = resultDirect.error!.message;
-            } else {
-              contectDirectLatency[url] = resultDirect.data.toString();
-            }
-
-            contectCurrentLatency[url] = "not support";
+        // VPN off: testDNSConnectLatency falls back to the direct (physical
+        // NIC) probe, so only the "current"/proxy-detour column is unknown.
+        if (!started ||
+            url == SettingConfigItemDNS.kDNSLocal ||
+            url == SettingConfigItemDNS.kDNSDHCP) {
+          ReturnResult<int> resultDirect = await ServerManager
+              .testDNSConnectLatency([url], detourDirect, null);
+          if (resultDirect.error != null) {
+            contectDirectLatency[url] = resultDirect.error!.message;
           } else {
-            var value = await Future.wait([
-              ServerManager.testDNSConnectLatency([url], detourDirect, null),
-              ServerManager.testDNSConnectLatency([url], detourCurrent, null),
-            ]);
-
-            if (value[0].error != null) {
-              contectDirectLatency[url] = value[0].error!.message;
-            } else {
-              contectDirectLatency[url] = value[0].data.toString();
-            }
-
-            if (value[1].error != null) {
-              contectCurrentLatency[url] = value[1].error!.message;
-            } else {
-              contectCurrentLatency[url] = value[1].data.toString();
-            }
+            contectDirectLatency[url] = resultDirect.data.toString();
           }
+
+          contectCurrentLatency[url] = started
+              ? "not support"
+              : "vpn not started"; // local/dhcp never supports a detour
         } else {
-          _taskQueue?.cancel();
-          _taskQueue = null;
+          var value = await Future.wait([
+            ServerManager.testDNSConnectLatency([url], detourDirect, null),
+            ServerManager.testDNSConnectLatency([url], detourCurrent, null),
+          ]);
+
+          if (value[0].error != null) {
+            contectDirectLatency[url] = value[0].error!.message;
+          } else {
+            contectDirectLatency[url] = value[0].data.toString();
+          }
+
+          if (value[1].error != null) {
+            contectCurrentLatency[url] = value[1].error!.message;
+          } else {
+            contectCurrentLatency[url] = value[1].data.toString();
+          }
         }
         return url;
       },

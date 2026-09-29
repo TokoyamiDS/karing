@@ -13,6 +13,7 @@ import 'package:karing/app/modules/server_manager.dart';
 import 'package:karing/app/modules/setting_manager.dart';
 import 'package:karing/app/runtime/return_result.dart';
 import 'package:karing/app/utils/accessibility_utils.dart';
+import 'package:karing/app/utils/network_utils.dart';
 import 'package:karing/app/utils/error_reporter_utils.dart';
 import 'package:karing/app/utils/file_utils.dart';
 import 'package:karing/app/utils/path_utils.dart';
@@ -809,7 +810,13 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
             padding: const EdgeInsets.symmetric(horizontal: padding),
             width: double.infinity,
             height: ThemeConfig.kListItemHeight,
-            color: disabled ? Colors.grey : null,
+            color: disabled
+                ? Colors.grey
+                : (server.raw['server_ip_replaced'] == true
+                    ? Colors.green.withValues(alpha: 0.12)
+                    : (server.raw['cf'] == true
+                        ? Colors.orange.withValues(alpha: 0.12)
+                        : null)),
             child: Row(
               children: [
                 Column(
@@ -825,6 +832,20 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
+                        if (server.raw['server_ip_replaced'] == true ||
+                            server.raw['cf'] == true) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: server.raw['server_ip_replaced'] == true
+                                  ? Colors.green
+                                  : Colors.orange,
+                            ),
+                          ),
+                        ],
                         SizedBox(
                           width: server.attach.isEmpty
                               ? centerWidth
@@ -931,6 +952,30 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
                                   ),
                                 ),
                               ),
+                              // Where this node exits, in front of the ping so
+                              // a node can be picked on location and latency
+                              // together. The configured address is deliberately
+                              // not used here: a Cloudflare-fronted node dials an
+                              // anycast IP that says nothing about the exit.
+                              // Empty until the node has been tested once.
+                              if (server.outletip.isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    NetworkUtils.outletLabel(
+                                      server.outletregion,
+                                      server.outletip,
+                                      server.outletIpCost,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize:
+                                          ThemeConfig.kFontSizeListSubItem,
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(width: 2),
                               CommonWidget.createLatencyWidget(
                                 context,
@@ -1032,27 +1077,8 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        ServerManager.hasTestOutboundServer()
-                            ? const SizedBox(
-                                height: 26,
-                                width: 26,
-                                child: RepaintBoundary(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            : Tooltip(
-                                message: tcontext.meta.latencyTest,
-                                child: InkWell(
-                                  onTap: () async {
-                                    onTapTestOutboundLatencyAll();
-                                  },
-                                  child: const SizedBox(
-                                    width: 50,
-                                    height: 30,
-                                    child: Icon(Icons.bolt_outlined, size: 30),
-                                  ),
-                                ),
-                              ),
+                        _buildHeaderUpdateAllButton(tcontext),
+                        _buildHeaderLatencyTestButton(tcontext),
                         Tooltip(
                           message: tcontext.meta.more,
                           child: InkWell(
@@ -1278,6 +1304,45 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
     showSheetWidgets(context: context, widgets: widgets);
   }
 
+  bool _hasAnythingDisabled() {
+    for (var group in ServerManager.getConfig().items) {
+      if (!group.enable) {
+        return true;
+      }
+      for (var server in group.servers) {
+        if (ServerManager.getUse().disable
+            .contains(ServerUse.getDisableKey(server))) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// One-tap recovery: re-enables every profile group and clears the
+  /// per-node disable list (server_manager "type;server;port" keys).
+  void onTapEnableAll() async {
+    final tcontext = Translations.of(context);
+    bool? yes = await DialogUtils.showConfirmDialog(
+      context,
+      tcontext.meta.enableAllProfilesTips,
+    );
+    if (yes != true) {
+      return;
+    }
+    for (var group in ServerManager.getConfig().items) {
+      if (!group.enable) {
+        await ServerManager.enableGroup(group.groupid, true);
+      }
+    }
+    ServerManager.getUse().disable.clear();
+    await ServerManager.saveUse();
+    await ServerManager.saveServerConfig();
+    ServerManager.setDirty(true);
+    _buildData();
+    setState(() {});
+  }
+
   void onTapMore() {
     final tcontext = Translations.of(context);
     List<Widget> widgets = [
@@ -1321,16 +1386,149 @@ class MyProfilesScreenState extends LasyRenderingState<MyProfilesScreen> {
           onTapMerge();
         },
       ),
+      if (_hasAnythingDisabled())
+        ListTile(
+          title: Text(tcontext.meta.enableAllProfiles),
+          leading: Icon(Icons.check_circle_outline),
+          onTap: () async {
+            Navigator.pop(context);
+            onTapEnableAll();
+          },
+        ),
     ];
 
     showSheetWidgets(context: context, widgets: widgets);
   }
 
-  void onTapTestOutboundLatencyAll() async {
-    bool ok = await startVPN();
-    if (!ok) {
-      return;
+  /// Remote profiles currently being re-downloaded (the header update-all
+  /// spinner shows this count while subscriptions refresh).
+  int _reloadingAllCount() {
+    int count = 0;
+    for (var item in ServerManager.getConfig().items) {
+      if (item.isRemote() && ServerManager.isReloading(item.groupid)) {
+        count++;
+      }
     }
+    return count;
+  }
+
+  /// Overall remaining latency tests across every enabled group: queued
+  /// (testLatency / testLatencyIndepends) plus currently running probes.
+  /// Driven by the onEventTestLatency repaint path.
+  int _totalRemainingLatencyTests() {
+    int total = 0;
+    for (var item in ServerManager.getConfig().items) {
+      if (!item.enable) {
+        continue;
+      }
+      total += item.testLatency.length;
+      total += item.testLatencyIndepends.length;
+      total += ServerManager.getTestOutboundServerLatencyTestingCount(
+        item.groupid,
+      );
+    }
+    return total;
+  }
+
+  Widget _buildHeaderUpdateAllButton(Translations tcontext) {
+    final reloading = _reloadingAllCount();
+    if (reloading > 0) {
+      return Tooltip(
+        message: "$reloading",
+        child: SizedBox(
+          height: 26,
+          width: 34,
+          child: Stack(
+            children: [
+              const Positioned(
+                left: 4,
+                top: 0,
+                height: 26,
+                width: 26,
+                child: RepaintBoundary(child: CircularProgressIndicator()),
+              ),
+              Positioned(
+                left: 0,
+                top: 6,
+                height: 20,
+                width: 34,
+                child: Text(
+                  reloading.toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: reloading > 999 ? 8 : 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return Tooltip(
+      message: "${tcontext.meta.update} ${tcontext.meta.profile}",
+      child: InkWell(
+        onTap: () async {
+          onTapReloadAll();
+        },
+        child: const SizedBox(
+          width: 50,
+          height: 30,
+          child: Icon(Icons.cloud_download_outlined, size: 30),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderLatencyTestButton(Translations tcontext) {
+    final remaining = _totalRemainingLatencyTests();
+    if (remaining > 0) {
+      return Tooltip(
+        message: "$remaining",
+        child: SizedBox(
+          height: 26,
+          width: 34,
+          child: Stack(
+            children: [
+              const Positioned(
+                left: 4,
+                top: 0,
+                height: 26,
+                width: 26,
+                child: RepaintBoundary(child: CircularProgressIndicator()),
+              ),
+              Positioned(
+                left: 0,
+                top: 6,
+                height: 20,
+                width: 34,
+                child: Text(
+                  remaining.toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: remaining > 999 ? 8 : 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return Tooltip(
+      message: tcontext.meta.latencyTest,
+      child: InkWell(
+        onTap: () async {
+          onTapTestOutboundLatencyAll();
+        },
+        child: const SizedBox(
+          width: 50,
+          height: 30,
+          child: Icon(Icons.bolt_outlined, size: 30),
+        ),
+      ),
+    );
+  }
+
+  void onTapTestOutboundLatencyAll() async {
+    // Core up: clash delay API. Core down: ServerManager falls back to the
+    // direct NIC probe (NodeDirectProbe) without starting the VPN.
     for (var group in ServerManager.getConfig().items) {
       ServerManager.testOutboundLatencyForGroup(group.groupid);
     }

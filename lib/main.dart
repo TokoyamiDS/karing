@@ -348,6 +348,10 @@ class MyAppState extends State<MyApp>
   static const kMenuExit = "exit_app";
   bool _launchAtStartup = false;
   bool _windowVisibleForMac = false;
+
+  /// Last grey state actually applied to the tray icon, so the periodic
+  /// reconciliation does not re-set the icon when nothing changed.
+  bool? _trayIconGrey;
   bool _trayGrey = true;
   final Themes _themes = Themes();
   @override
@@ -592,9 +596,6 @@ class MyAppState extends State<MyApp>
 
     Biz.onEventVPNStateChanged = ((bool connected) {
       if (PlatformUtils.isPC()) {
-        if (_trayGrey == !connected) {
-          return;
-        }
         _setTray(!connected, false, false);
       }
     });
@@ -638,11 +639,23 @@ class MyAppState extends State<MyApp>
   }
 
   void _setTray(bool grey, bool destroy, bool quitIfFailed) {
+    // Store the desired state synchronously so a right-click during the 300 ms
+    // delay builds the menu from the newest value, not the previous one.
+    _trayGrey = grey;
     Future.delayed(const Duration(milliseconds: 300), () async {
       if (destroy || Platform.isLinux) {
         await trayManager.destroy();
       }
 
+      // Coalesce: if a newer transition superseded this one, drop it.
+      if (!destroy && _trayGrey != grey) {
+        return;
+      }
+      // Idempotent: the periodic state reconciliation re-asserts the same
+      // state every few seconds; do not re-set the icon then.
+      if (!destroy && _trayIconGrey == grey) {
+        return;
+      }
       try {
         if (Platform.isWindows) {
           await trayManager.setIcon(
@@ -655,7 +668,7 @@ class MyAppState extends State<MyApp>
             isTemplate: false,
           );
         }
-        _trayGrey = grey;
+        _trayIconGrey = grey;
       } catch (err, stacktrace) {
         Log.w("setIcon exception: ${err.toString()}, quit");
         if (quitIfFailed) {

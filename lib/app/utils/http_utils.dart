@@ -15,6 +15,12 @@ import 'package:punycode_converter/punycode_converter.dart';
 import 'package:tuple/tuple.dart';
 import 'package:http/http.dart' as http;
 
+/// How long a download may receive no bytes at all before it is treated as
+/// dead. Deliberately separate from the per-request deadline, which only covers
+/// the server *responding*: a large file on a slow link may legitimately take
+/// minutes, and capping the transfer itself is what made downloads die partway.
+const Duration kDownloadStallTimeout = Duration(seconds: 30);
+
 typedef DecodeCallback = String Function(String);
 
 abstract final class HttpUtils {
@@ -142,8 +148,11 @@ abstract final class HttpUtils {
     int? proxyPort,
     String? userAgent,
     bool xhwid,
-    Duration? timeout,
-  ) async {
+    Duration? timeout, {
+    // Byte offset to continue from. Non-zero asks the server for the rest of the
+    // file with a `Range` header and appends what arrives.
+    int offset = 0,
+  }) async {
     timeout ??= const Duration(seconds: 60);
     var client = HttpClient();
     client.badCertificateCallback = _certificateCheck;
@@ -164,22 +173,39 @@ abstract final class HttpUtils {
         hwidHeaders.forEach((key, value) => request.headers.set(key, value));
       }
       //request.cookies.add(Cookie("expire_in", "1689576560"));
-      HttpClientResponse? response = await Future.any([
-        waitResponseDone(request, path),
-        waitResponseTimeout(request, timeout),
-      ]);
-
-      if (response == null) {
-        return ReturnResult(
-          error: ReturnResultError(
-            "http response timeout after ${timeout.inSeconds} seconds",
-          ),
-        );
+      if (offset > 0) {
+        request.headers.set(HttpHeaders.rangeHeader, "bytes=$offset-");
       }
-      if (response.statusCode != 200) {
+      // `timeout` bounds how long the server may take to answer, not how long
+      // the file may take to arrive. Racing the whole transfer against it meant
+      // any download that outlived the deadline died partway, and the partial
+      // file was then deleted, so a slow link could never finish anything large.
+      HttpClientResponse response = await request.close().timeout(timeout);
+      // 206 means the server honoured our Range and is sending the remainder, so
+      // what is already on disk is a valid prefix and must be kept. 200 means it
+      // ignored the Range and is sending the whole file: the partial is then
+      // worthless and has to be replaced, or the result would be corrupt.
+      final bool resuming = offset > 0 && response.statusCode == 206;
+      if (response.statusCode != 200 && response.statusCode != 206) {
         return ReturnResult(
           error: ReturnResultError("http statusCode: ${response.statusCode}"),
         );
+      }
+      if (path.isNotEmpty) {
+        // Guard the transfer against *stalling* instead: as long as bytes keep
+        // arriving it may take as long as it needs, but a connection that goes
+        // quiet for kDownloadStallTimeout is treated as dead.
+        final sink = File(
+          path,
+        ).openWrite(mode: resuming ? FileMode.append : FileMode.write);
+        try {
+          await response.timeout(kDownloadStallTimeout).pipe(sink);
+        } catch (err) {
+          try {
+            await sink.close();
+          } catch (_) {}
+          rethrow;
+        }
       }
       return ReturnResult(data: response.headers);
     } catch (err, _) {

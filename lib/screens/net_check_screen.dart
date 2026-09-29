@@ -13,6 +13,7 @@ import 'package:karing/app/utils/clash_api.dart';
 import 'package:karing/app/utils/http_utils.dart';
 import 'package:karing/app/utils/network_utils.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
+import 'package:karing/app/utils/scan_dialer.dart';
 import 'package:karing/app/utils/singbox_config_builder.dart';
 import 'package:karing/app/utils/system_utils.dart';
 import 'package:karing/app/utils/websocket.dart';
@@ -23,6 +24,7 @@ import 'package:karing/screens/theme_config.dart';
 import 'package:karing/screens/widgets/framework.dart';
 import 'package:karing/screens/widgets/text_field.dart';
 import 'package:tuple/tuple.dart';
+import 'package:vpn_service/state.dart' show FlutterVpnServiceState;
 
 class NetCheckItem {
   String name = "";
@@ -61,6 +63,7 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
   NetCheckItem? _netCheckItemDomainDNSQuery;
   NetCheckItem? _netCheckItemHostConnectivity;
   NetCheckItem? _netCheckItemRouteTable;
+  NetCheckItem? _netCheckItemLocalPort;
 
   @override
   void initState() {
@@ -84,8 +87,41 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
     }
   }
 
+  /// Makes sure the VPN is up before any check can run, without ever
+  /// silently turning the VPN on: when it is disconnected the user is asked
+  /// first. Returns false when the checks must not run.
   Future<bool> startVPN() async {
-    return await Biz.startOrRestartIfDirtyVPN(context, "NetCheckScreen");
+    final tcontext = Translations.of(context);
+    var state = await VPNService.getState();
+    if (state == FlutterVpnServiceState.disconnected) {
+      final go = await DialogUtils.showConfirmDialog(
+        context,
+        tcontext.NetCheckScreen.vpnNotConnected,
+      );
+      if (!mounted || go != true) {
+        return false;
+      }
+    }
+    final ok = await Biz.startOrRestartIfDirtyVPN(context, "NetCheckScreen");
+    if (ok == false) {
+      return false;
+    }
+    // wait until the core's control API actually answers, otherwise the
+    // checks below race the startup and report empty results
+    final ready = await ScanDialer.waitCoreReady();
+    if (!mounted) {
+      return false;
+    }
+    if (!ready) {
+      DialogUtils.showAlertDialog(
+        context,
+        tcontext.NetCheckScreen.hostConnectionFailed(
+          p: "VPN core did not become ready in time",
+        ),
+      );
+      return false;
+    }
+    return true;
   }
 
   void _connectLog() async {
@@ -186,6 +222,7 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
       _netCheckItemDomainDNSQuery,
       _netCheckItemHostConnectivity,
       if (!Platform.isIOS) ...[_netCheckItemRouteTable],
+      if (!Platform.isIOS && !Platform.isAndroid) ...[_netCheckItemLocalPort],
     ];
     for (var check in checks) {
       if (check == null) {
@@ -627,7 +664,7 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
       }
     } else {
       _netCheckItemDomainDNSQuery?.values.add(
-        ReturnResult(data: result.data!.item2),
+        ReturnResult(error: result.error),
       );
     }
 
@@ -817,6 +854,49 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
     return ok;
   }
 
+  /// The core cannot start at all when Windows has reserved the port it binds
+  /// — WinNAT/Hyper-V take whole 100-port blocks, so 3001-3100 can vanish —
+  /// and the only symptom the user sees is "cannot connect". Checking it here
+  /// turns that silent failure into a named one.
+  Future<bool> _checkLocalPort() async {
+    var setting = SettingManager.getConfig();
+    final tcontext = Translations.of(context);
+    _netCheckItemLocalPort ??= NetCheckItem();
+    _netCheckItemLocalPort!.name = tcontext.NetCheckScreen.localPort;
+
+    // While the core is up these ports are held by this app on purpose, so a
+    // failed bind would be a false alarm.
+    final started = await VPNService.getStarted();
+    final ports = [setting.proxy.mixedRulePort, setting.proxy.controlPort];
+    for (final port in ports) {
+      if (started) {
+        _netCheckItemLocalPort!.values.add(
+          ReturnResult(data: tcontext.NetCheckScreen.localPortInUse(p: port)),
+        );
+        continue;
+      }
+      try {
+        final socket = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          port,
+        );
+        await socket.close();
+        _netCheckItemLocalPort!.values.add(
+          ReturnResult(data: tcontext.NetCheckScreen.localPortOk(p: port)),
+        );
+      } catch (err) {
+        _netCheckItemLocalPort!.values.add(
+          ReturnResult(
+            error: ReturnResultError(
+              tcontext.NetCheckScreen.localPortReserved(p: port),
+            ),
+          ),
+        );
+      }
+    }
+    return true;
+  }
+
   Future<bool> _checkRouteTable() async {
     _netCheckItemRouteTable ??= NetCheckItem();
     _netCheckItemRouteTable!.name = "Route Table";
@@ -933,10 +1013,10 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
           TextFieldEx(
             controller: _textControllerHost,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              labelText: "Domain",
-              hintText: "Domain",
-              prefixIcon: Icon(Icons.edit_note_outlined),
+            decoration: InputDecoration(
+              labelText: tcontext.meta.domain,
+              hintText: tcontext.meta.domain,
+              prefixIcon: const Icon(Icons.edit_note_outlined),
             ),
           ),
           const SizedBox(height: 10),
@@ -1062,6 +1142,7 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
     _netCheckItemNonOutboundDNSQuery = null;
     _netCheckItemDomainDNSQuery = null;
     _netCheckItemHostConnectivity = null;
+    _netCheckItemLocalPort = null;
     _buildData();
     setState(() {});
     if (!NetworkUtils.isDomain(_domainAndPort.item1, false)) {
@@ -1075,6 +1156,16 @@ class _NetCheckScreenState extends LasyRenderingState<NetCheckScreen> {
     _domain =
         NetworkUtils.getRealDomain(_domainAndPort.item1) ??
         _domainAndPort.item1;
+    // Measure the local ports BEFORE the core starts: once it is up they are
+    // held by this app on purpose, which would mask a Windows reservation.
+    if (!Platform.isIOS && !Platform.isAndroid) {
+      await _checkLocalPort();
+      if (!mounted) {
+        return;
+      }
+      _buildData();
+      setState(() {});
+    }
     _disconnectLog();
     _connectLog();
     bool ok = await startVPN();

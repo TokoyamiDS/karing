@@ -300,17 +300,22 @@ abstract final class FileUtils {
     return true;
   }
 
+  /// Appends [content] to [filePath], creating the file when it is missing.
+  ///
+  /// The create-on-missing part matters: the core's stdout/stderr are captured
+  /// through here, and the log files are deleted just before the core is
+  /// spawned. An earlier version only wrote when the file already existed, so
+  /// that first append was always a no-op and the core's entire output was
+  /// dropped on the floor. `FileMode.append` creates the file for us.
   static Future<bool> append(String filePath, String content) async {
     if (filePath.isEmpty) return false;
 
     try {
       var file = File(filePath);
-      if (await file.exists()) {
-        final raf = await file.open(mode: FileMode.append);
-        await raf.writeString(content);
-        await raf.close();
-        return true;
-      }
+      final raf = await file.open(mode: FileMode.append);
+      await raf.writeString(content);
+      await raf.close();
+      return true;
     } catch (e) {}
 
     return false;

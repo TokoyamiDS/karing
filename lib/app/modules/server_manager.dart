@@ -17,10 +17,13 @@ import 'package:karing/app/utils/backup_and_sync_utils.dart';
 import 'package:karing/app/utils/clash_api.dart';
 import 'package:karing/app/utils/cloudflare_utils.dart';
 import 'package:karing/app/utils/convert_utils.dart';
+import 'package:karing/app/utils/dns_direct_probe.dart';
+import 'package:karing/app/utils/node_direct_probe.dart';
 
 import 'package:karing/app/utils/file_utils.dart';
 import 'package:karing/app/utils/http_utils.dart';
 import 'package:karing/app/utils/log.dart';
+import 'package:karing/app/utils/network_utils.dart';
 import 'package:karing/app/utils/path_utils.dart';
 import 'package:karing/app/utils/platform_utils.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
@@ -1067,9 +1070,13 @@ class ServerManager {
   }
 
   /// UI helper: is this node behind Cloudflare (literal IP in a CF range or
-  /// a domain whose resolved address is)?
+  /// a domain whose resolved address is)? Nodes with a clean-IP replacement
+  /// applied stay labeled CF so the badge/restore path keeps working.
   static bool isServerCloudflare(ProxyConfig server) {
-    final host = server.server.trim();
+    if (server.raw['server_ip_replaced'] == true) {
+      return true;
+    }
+    final host = (server.raw['cf_replaced'] ?? server.server).toString().trim();
     if (host.isEmpty) {
       return false;
     }
@@ -1090,11 +1097,53 @@ class ServerManager {
     return false;
   }
 
+  /// True when at least one enabled group holds a real server node.
+  ///
+  /// Lets the home screen tell "nothing imported yet" apart from "nothing
+  /// selected": with no servers the server list is empty, so tapping through
+  /// to it is a dead end.
+  static bool hasServers() {
+    for (var group in _serverConfig.items) {
+      if (!group.enable) {
+        continue;
+      }
+      for (var s in group.servers) {
+        if (s.type == kOutboundTypeServer) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Every Cloudflare-labeled server node across the enabled groups — used
+  /// by the scanner screen to latency-test them WITHOUT replacing anything.
+  static List<ProxyConfig> getCloudflareServers() {
+    final out = <ProxyConfig>[];
+    for (var group in _serverConfig.items) {
+      if (!group.enable) {
+        continue;
+      }
+      for (var s in group.servers) {
+        if (s.type != kOutboundTypeServer) {
+          continue;
+        }
+        if (isServerCloudflare(s)) {
+          out.add(s);
+        }
+      }
+    }
+    return out;
+  }
+
   /// One-tap clean-IP replacement: every CF-fronted server node dials one of
   /// [cleanIps] instead of its (possibly blocked) original address. The
   /// original host is kept for display and restore; assignment is
   /// deterministic per tag so nodes spread over the IP pool.
-  static int replaceCloudflareServerIps(List<String> cleanIps) {
+  ///
+  /// Persists the change and marks the config dirty so a connected core is
+  /// regenerated on the next [reload]. Returns the number of nodes changed.
+  static Future<int> replaceCloudflareServerIps(List<String> cleanIps) async {
     if (cleanIps.isEmpty) {
       return 0;
     }
@@ -1109,22 +1158,29 @@ class ServerManager {
         }
         final ip = cleanIps[s.tag.hashCode.abs() % cleanIps.length];
         if (s.raw['server_ip_replaced'] != true) {
-          s.raw['cf_replaced'] = s.server;
+          // keep the pre-replacement host for restore + display. Prefer the
+          // raw server entry; fall back to the object field.
+          final original = s.raw['server'];
+          s.raw['cf_replaced'] =
+              (original is String && original.isNotEmpty) ? original : s.server;
         }
         s.raw['server_ip_replaced'] = true;
         s.raw['server'] = ip;
+        // buildOutbound()/lists read `server.server`, not raw — keep both in
+        // sync or the replacement silently no-ops.
+        s.server = ip;
         count++;
       }
     }
     if (count > 0) {
-      saveServerConfig();
+      await saveServerConfig();
       setDirty(true);
     }
     return count;
   }
 
   /// Reverts [replaceCloudflareServerIps]: puts the original address back.
-  static int restoreCloudflareServerIps() {
+  static Future<int> restoreCloudflareServerIps() async {
     int count = 0;
     for (var group in _serverConfig.items) {
       for (var s in group.servers) {
@@ -1142,7 +1198,7 @@ class ServerManager {
       }
     }
     if (count > 0) {
-      saveServerConfig();
+      await saveServerConfig();
       setDirty(true);
     }
     return count;
@@ -1378,7 +1434,13 @@ class ServerManager {
   ) async {
     bool started = await VPNService.getStarted();
     if (!started) {
-      return ReturnResult(error: ReturnResultError("service is not running"));
+      // No core: the clash DNS API is unavailable, but the direct path can
+      // still be measured on the physical NIC (DnsDirectProbe). A proxy
+      // detour needs the core, so only that keeps reporting the service down.
+      if (detour != kOutboundTagDirect) {
+        return ReturnResult(error: ReturnResultError("service is not running"));
+      }
+      return _testDNSDirectLatency(dnsUrl, testDomain);
     }
     var settingConfig = SettingManager.getConfig();
     String regionCode = settingConfig.regionCode.toLowerCase();
@@ -1466,14 +1528,58 @@ class ServerManager {
     }
   }
 
+  static Future<ReturnResult<int>> _testDNSDirectLatency(
+    List<String> dnsUrl,
+    String? testDomain,
+  ) async {
+    final domain = testDomain ?? SettingManager.getConfig().dns.testDomain;
+    int? best;
+    String lastErr = "service is not running";
+    for (var url in dnsUrl) {
+      final r = await DnsDirectProbe.probe(url, domain);
+      if (r.ok) {
+        if (best == null || r.latencyMs < best) {
+          best = r.latencyMs;
+        }
+      } else {
+        lastErr = r.error;
+      }
+    }
+    Log.w("testDNSConnectLatency direct domain=$domain best=$best err=$lastErr");
+    if (best != null) {
+      return ReturnResult(data: best);
+    }
+    return ReturnResult(error: ReturnResultError(lastErr));
+  }
+
+  /// VPN-off latency test on the physical NIC (see NodeDirectProbe). Reuses
+  /// the clash path's event contract so the lists repaint identically, and
+  /// never starts the core / system proxy / TUN.
+  static Future<void> _directTestLatency(
+      ServerConfigGroupItem item, List<ProxyConfig> servers) async {
+    for (var server in servers) {
+      if (!item.testLatency.contains(server.tag)) {
+        item.testLatency.add(server.tag);
+      }
+    }
+    _onEventTestOutboundLatency.forEach((key, valueCallback) {
+      valueCallback("", "", true, false);
+    });
+    await NodeDirectProbe.probeServers(servers, onResult: (result, _, _) {
+      _onEventTestOutboundLatency.forEach((key, valueCallback) {
+        valueCallback(item.groupid, result.server.tag, false, false);
+      });
+    });
+    item.testLatency.clear();
+    _onEventTestOutboundLatency.forEach((key, valueCallback) {
+      valueCallback("", "", false, true);
+    });
+  }
+
   static Future<ReturnResultError?> testOutboundLatencyForGroup(
     String groupid,
   ) async {
     bool started = await VPNService.getStarted();
-    if (!started) {
-      return ReturnResultError("service is not running");
-    }
-
     ServerConfigGroupItem? item = getByGroupId(groupid);
     if (item == null) {
       return ReturnResultError("invalid group");
@@ -1486,6 +1592,11 @@ class ServerManager {
     }
     if (item.testLatency.isNotEmpty) {
       return ReturnResultError("already testing");
+    }
+    if (!started) {
+      unawaited(_directTestLatency(item,
+          item.servers.where((s) => s.type == kOutboundTypeServer).toList()));
+      return null;
     }
     for (var server in item.servers) {
       if (item.testLatency.contains(server.tag)) {
@@ -1508,10 +1619,6 @@ class ServerManager {
     String groupid,
   ) async {
     bool started = await VPNService.getStarted();
-    if (!started) {
-      return ReturnResultError("service is not running");
-    }
-
     ServerConfigGroupItem? item = getByGroupId(groupid);
     if (item == null) {
       return ReturnResultError("invalid group");
@@ -1524,6 +1631,14 @@ class ServerManager {
     }
     if (item.testLatencyIndepends.contains(tag)) {
       return ReturnResultError("already testing");
+    }
+    if (!started) {
+      ProxyConfig? server = item.getByTag(tag);
+      if (server == null) {
+        return ReturnResultError("invalid tag");
+      }
+      unawaited(_directTestLatency(item, [server]));
+      return null;
     }
 
     // Check if this specific subscription is updating
@@ -1719,15 +1834,60 @@ class ServerManager {
         targetUrl: settings.urlTest,
       );
       if (result.error == null) {
-        if (settings.latencyCheckResoveIP) {
+        // Resolve where the node actually exits, so the list can show its
+        // location inline. The address field cannot be trusted for this: a
+        // Cloudflare-fronted node dials an anycast IP that says nothing about
+        // where the traffic comes out.
+        //
+        // Runs on every successful latency check. It used to be skipped once an
+        // address was known, which froze the shown cost at the first reading —
+        // re-testing a node never updated it, so the row kept displaying a
+        // duration that described a measurement from some earlier session.
+        //
+        // One small request per node per test. The latency probe itself is a
+        // request per node per test, so this does not change the order of
+        // magnitude, and it is what makes a manual re-test actually re-measure.
+        {
+          final stopwatch = Stopwatch()..start();
           ReturnResult<HttpRequestResponse> httpresult =
-              await ClashApi.getHttpRequestByProxy(
-                settings.proxy.mixedRulePort,
+              await ClashApi.getHttpRequestByProxyTag(
+                // The control port and the tag, so the core dials *this* node.
+                // The mixed port could not do that — it is routed by the rules to
+                // whichever node is selected, which is why every row used to show
+                // the same exit IP.
+                settings.proxy.controlPort,
                 tag,
-                "https://checkip.amazonaws.com",
+                // Cloudflare's edge answers with a tiny plaintext trace: `ip=` and
+                // `loc=`, and nothing else we need.
+                //
+                // HTTPS, not HTTP. Plain HTTP is a round trip cheaper, but it is
+                // answered `400 The plain HTTP request was sent to HTTPS port` on
+                // nodes whose path forces the upgrade, and those nodes then
+                // reported no location at all.
+                "https://www.cloudflare.com/cdn-cgi/trace",
+                timeoutMs: 8000,
               );
+          stopwatch.stop();
           if (httpresult.error == null) {
-            config.outletip = httpresult.data!.body.trim();
+            final parsed = NetworkUtils.parseOutletIpBody(
+              httpresult.data!.body,
+            );
+            config.outletip = parsed.item1;
+            config.outletregion = parsed.item2;
+            // Record the cost only for a real result, so an empty answer cannot
+            // claim a measurement it never made.
+            config.outletIpCost =
+                config.outletip.isEmpty ? 0 : stopwatch.elapsedMilliseconds;
+          } else {
+            // A failed lookup must not leave the *previous* exit IP on screen.
+            // These nodes fail often, and without this the row keeps showing
+            // whatever country was measured before — switch from a Polish node to
+            // a US one and the US node still reads Poland until some later lookup
+            // happens to succeed. Same principle as the cost above: no result
+            // means no claim.
+            config.outletip = "";
+            config.outletregion = "";
+            config.outletIpCost = 0;
           }
         }
 
@@ -2321,6 +2481,37 @@ class ServerManager {
       return null;
     }
     return _use.recent.first;
+  }
+
+  /// Resolves a possibly-stale selection (a `recent` entry loaded from a
+  /// previous run, or a node whose profile was updated/removed/disabled) to
+  /// the live object from the current server config. Returns null when the
+  /// selection no longer maps to a usable node and the caller should fall
+  /// back to the auto-select group. Pseudo-outbounds (urltest/direct/block)
+  /// are always valid and returned unchanged.
+  static ProxyConfig? resolveSelection(ProxyConfig? selected) {
+    if (selected == null || selected.tag.isEmpty) {
+      return null;
+    }
+    if (selected.type != kOutboundTypeServer) {
+      return selected;
+    }
+    ServerConfigGroupItem? group = getByGroupId(selected.groupid);
+    if (group == null || !group.enable) {
+      return null;
+    }
+    ProxyConfig? live = group.getByTag(selected.tag);
+    if (live == null) {
+      return null;
+    }
+    if (_use.disable.contains(ServerUse.getDisableKey(live))) {
+      return null;
+    }
+    // keep the freshest latency so the UI does not show a stale value
+    if (live.latency.isEmpty && selected.latency.isNotEmpty) {
+      live.latency = selected.latency;
+    }
+    return live;
   }
 
   static void toggleFav(ProxyConfig config) {

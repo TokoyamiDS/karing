@@ -6,6 +6,8 @@ import 'package:karing/app/modules/server_manager.dart';
 import 'package:karing/app/modules/setting_manager.dart';
 import 'package:karing/app/runtime/return_result.dart';
 import 'package:karing/app/utils/app_utils.dart';
+import 'package:karing/app/utils/log.dart';
+import 'package:karing/app/utils/path_utils.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
 import 'package:karing/app/utils/singbox_outbound.dart';
 import 'package:karing/app/utils/tag_gen.dart';
@@ -89,6 +91,8 @@ class SingboxInboundTunOptions {
 }
 
 class SingboxInboundMixedOptions {
+  static const String hostLocal = '127.0.0.1';
+
   String type = "mixed";
   String tag = "mixed-in";
   String listen = "127.0.0.1";
@@ -150,9 +154,23 @@ class SingboxConfigBuilder {
   static const String kOutboundTagSpecial = "special";
 
   static dynamic log(SingboxExportType type) {
+    // At `warn` the core stays silent about a failed delay test — all the app
+    // ever sees is the Clash API's generic "An error occurred in the delay
+    // test", with no reason attached. A diagnostic build asks for debug output.
+    //
+    // Point the core at its own log file rather than relying on the app
+    // capturing its stdout/stderr: the core logs to **stderr**, and that capture
+    // proved unreliable in practice — neither `service_core.log` nor
+    // `service_error.log` was ever created. A file the core writes itself cannot
+    // be lost that way. Only set when a writable directory has been probed,
+    // because sing-box *fatal*s on an unwritable `log.output`.
+    final coreLog = kDiagnosticLogging
+        ? PathUtils.coreLogOutputPathIfProbed()
+        : null;
     return {
-      'level': 'warn',
+      'level': kDiagnosticLogging ? 'debug' : 'warn',
       'timestamp': true,
+      if (coreLog != null) 'output': coreLog,
     };
   }
 
@@ -193,17 +211,19 @@ class SingboxConfigBuilder {
         try {
           options.fromJson(server.raw);
           options.tag = server.tag;
-          return options.toJson();
+          return _normalizeOutboundCompatibility(options.toJson());
         } catch (_) {}
       }
-      return _outboundFromUrl(server);
+      return _normalizeOutboundCompatibility(_outboundFromUrl(server));
     } else if (server.type == kOutboundTypeUrltest) {
+      // Group outbounds are built with the same non-interrupting semantics as
+      // the main `proxy` selector — see the comment there.
       return {
         'type': 'urltest',
         'tag': server.tag,
         'outbounds': _selectorOutbounds(server),
         'tolerance': 50,
-        'interrupt_exist_connections': true,
+        'interrupt_exist_connections': false,
       };
     } else if (server.type == kOutboundTypeDirect) {
       return {'type': 'direct', 'tag': server.tag};
@@ -216,14 +236,85 @@ class SingboxConfigBuilder {
         'type': 'selector',
         'tag': server.tag,
         'outbounds': _selectorOutbounds(server),
-        'interrupt_exist_connections': true,
+        'interrupt_exist_connections': false,
       };
     } else {
       if (server.raw == null || server.raw.isEmpty) {
         return null;
       }
-      return Map<String, dynamic>.from(server.raw);
+      return _normalizeOutboundCompatibility(server.raw);
     }
+  }
+
+  /// Normalizes values that are valid in Xray/v2rayN but rejected by the
+  /// installed sing-box core. This final pass is intentionally performed at
+  /// config emission time as well as during import: existing persisted
+  /// profiles can contain legacy values and all enabled nodes are aggregated
+  /// into the generated config.
+  static dynamic _normalizeOutboundCompatibility(dynamic outbound) {
+    if (outbound is! Map) {
+      return outbound;
+    }
+    final result = Map<String, dynamic>.from(outbound);
+    if (result['type']?.toString().toLowerCase() == 'vless' &&
+        result['flow'] is String) {
+      final flow = normalizeVlessFlow(result['flow'] as String);
+      if (flow.isEmpty) {
+        result.remove('flow');
+      } else {
+        result['flow'] = flow;
+      }
+    }
+    return result;
+  }
+
+  /// Final safety net for imported/persisted profile data. Some profile paths
+  /// keep raw outbound maps and later aggregate them without passing through
+  /// the typed outbound model. Walk the generated config so the core never
+  /// receives an Xray-only VLESS flow value.
+  static dynamic normalizeConfigCompatibility(dynamic value) {
+    if (value is List) {
+      return value.map(normalizeConfigCompatibility).toList();
+    }
+    if (value is Map) {
+      final result = <dynamic, dynamic>{};
+      value.forEach((key, item) {
+        result[key] = normalizeConfigCompatibility(item);
+      });
+      if (result['type']?.toString().toLowerCase() == 'vless' &&
+          result['flow'] is String) {
+        final flow = normalizeVlessFlow(result['flow'] as String);
+        if (flow.isEmpty) {
+          result.remove('flow');
+        } else {
+          result['flow'] = flow;
+        }
+      }
+      // A share link that omits `host=` must send the SNI as the WebSocket Host.
+      // That is what v2rayN/Xray do, and Cloudflare routes by Host, so without it
+      // the upgrade is answered 403 and the node never connects.
+      //
+      // Done here as well as at parse time because this is the safety net for
+      // already-persisted data: a node imported before that default existed keeps
+      // its old raw forever, and re-importing a whole subscription to repair one
+      // node is not something to ask of anyone.
+      final transport = result['transport'];
+      if (transport is Map && transport['type'] == 'ws') {
+        final tls = result['tls'];
+        final sni = tls is Map ? tls['server_name']?.toString() ?? '' : '';
+        final headers = transport['headers'];
+        if (sni.isNotEmpty && !(headers is Map && headers.containsKey('Host'))) {
+          final merged = <dynamic, dynamic>{};
+          if (headers is Map) {
+            merged.addAll(headers);
+          }
+          merged['Host'] = sni;
+          transport['headers'] = merged;
+        }
+      }
+      return result;
+    }
+    return value;
   }
 
   static List<String> _selectorOutbounds(ProxyConfig server) {
@@ -260,7 +351,7 @@ class SingboxConfigBuilder {
           options.type = SingboxOutboundType.vless;
           final vless = SingboxOutboundVLESSOptions();
           vless.uuid = uri.userInfo;
-          vless.flow = q['flow'];
+           vless.flow = normalizeVlessFlow(q['flow']);
           options.vless = vless;
           break;
         }
@@ -402,6 +493,36 @@ class SingboxConfigBuilder {
         ..publicKey = q['pbk'] ?? ""
         ..shortId = q['sid'] ?? "";
     }
+    // PattN/karing share links carry per-node TLS fragmentation tuning in `fm=`
+    // (a finalmask JSON). The clash-side parser reads it (auto_conf_utils), but
+    // this one did not — so a node lost the lengths its own publisher tuned and
+    // was handed the generic preset instead. That is what made Cloudflare
+    // Workers nodes, which all ship `fm=`, fail every delay test.
+    final fm = q['fm'] ?? '';
+    if (fm.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(
+          fm.contains('%') ? Uri.decodeComponent(fm) : fm,
+        );
+        if (decoded is Map &&
+            decoded['tcp'] is List &&
+            (decoded['tcp'] as List).isNotEmpty) {
+          final settings = (decoded['tcp'] as List).first['settings'];
+          if (settings is Map) {
+            if (settings['lengths'] is List) {
+              tls.fragmentSizes = List<String>.from(
+                settings['lengths'].map((e) => e.toString()),
+              );
+            }
+            if (settings['delays'] is List) {
+              tls.fragmentDelays = List<String>.from(
+                settings['delays'].map((e) => e.toString()),
+              );
+            }
+          }
+        }
+      } catch (_) {}
+    }
     final tlsSetting = SettingManager.getConfig().tls;
     final isIr = SettingManager.getConfig().iranMode;
     tls.fragment = tlsSetting.enableFragment || isIr;
@@ -409,15 +530,23 @@ class SingboxConfigBuilder {
     tls.insecure = tls.insecure || tlsSetting.enableInsecure;
     if (tls.fragment) {
       if (isIr) {
-        // Patt's exact fragment+fingerprint preset (t.me/patt_channel_x/91)
-        tls.fragmentSizes = SettingConfigItemTLS.kFragmentSizesPatt;
-        tls.fragmentDelays = SettingConfigItemTLS.kFragmentDelaysPatt;
-        tls.fragmentMaxSplit = SettingConfigItemTLS.kFragmentMaxSplitPatt;
-        tls.cipherSuites =
-            SettingConfigItemTLS.kCipherSuitesPatt.split(':').toList();
+        // Patt's preset (t.me/patt_channel_x/91) is a FALLBACK here, not an
+        // override. A share that carries its own `fm=` fragment lengths, or its
+        // own cipher list, already knows what works against its own edge —
+        // Cloudflare Workers links ship exactly that, and overwriting it is
+        // what made every one of them fail its delay test.
+        if (tls.fragmentSizes.isEmpty) {
+          tls.fragmentSizes = SettingConfigItemTLS.kFragmentSizesPatt;
+          tls.fragmentDelays = SettingConfigItemTLS.kFragmentDelaysPatt;
+          tls.fragmentMaxSplit = SettingConfigItemTLS.kFragmentMaxSplitPatt;
+        }
+        if (tls.cipherSuites.isEmpty) {
+          tls.cipherSuites =
+              SettingConfigItemTLS.kCipherSuitesPatt.split(':').toList();
+        }
         tls.utls ??= (SingboxOutboundUTLSOptions()
           ..enabled = true
-          ..fingerprint = 'unsafe' == 'unsafe' ? 'chrome' : 'chrome');
+          ..fingerprint = 'chrome');
       } else {
         tls.fragmentSizes = tlsSetting.fragmentSize
             .split(',')
@@ -525,23 +654,46 @@ class SingboxConfigBuilder {
     final setting = SettingManager.getConfig();
     final regionCode = setting.regionCode;
     final resolveMode = setting.dns.proxyResolveMode;
+    // The consolidated Resolve Channel dropdown and the three per-purpose
+    // switches that predate it are additive: either one can turn a behaviour
+    // on and neither can turn it off, so the two controls can never end up
+    // contradicting each other.
+    final fakeIp = resolveMode == SettingConfigItemDNSProxyResolveMode.fakeip ||
+        setting.dns.enableFakeIp;
+    final resolveByProxy =
+        resolveMode == SettingConfigItemDNSProxyResolveMode.proxy ||
+            setting.dns.enableProxyResolveByProxy;
 
     final servers = <Map<String, dynamic>>[];
     final rules = <Map<String, dynamic>>[];
     final dnsRuleSets = <Map<String, dynamic>>[];
 
     final resolverDns = setting.dns.getResolverDns(regionCode, tunMode);
-    final remoteDns = resolveMode == SettingConfigItemDNSProxyResolveMode.fakeip
+    final remoteDns = fakeIp
         ? setting.dns.getProxyDns(regionCode, tunMode)
         : setting.dns.getOutboundDns(regionCode, tunMode);
     final directDns = setting.dns.getDirectDns(regionCode, tunMode);
+
+    // Resolving through the connected profile is supposed to mean the query
+    // actually leaves at the exit; only picking a different resolver still
+    // sends it out on the local network. Detour the remote servers so it is
+    // resolved at the exit. Skipped in serverless mode, where the selector
+    // has no real node behind it.
+    // `enableFinalResolveByProxy` needs a detoured resolver available even
+    // when the dropdown is not on `proxy`, otherwise "final through the
+    // proxy" has nothing to point at.
+    final remoteDetour =
+        (resolveByProxy || setting.dns.enableFinalResolveByProxy) &&
+                !setting.tls.enableServerless
+            ? kOutboundTagProxy
+            : null;
 
     int index = 1;
     final remoteServerTags = <String>[];
     for (final url in remoteDns) {
       final tag = "dns-remote-${index++}";
       remoteServerTags.add(tag);
-      servers.add(_dnsServerFromUrl(tag, url, null));
+      servers.add(_dnsServerFromUrl(tag, url, null, detour: remoteDetour));
     }
     final directServerTags = <String>[];
     for (final url in directDns) {
@@ -594,12 +746,10 @@ class SingboxConfigBuilder {
       }
     }
 
-    final resolverForBootstrap =
-        directServerTags.isNotEmpty ? directServerTags.first : null;
-    rules.add({
-      'outbound': 'any',
-      'server': resolverForBootstrap ?? remoteServerTags.first,
-    });
+    // There used to be an `{'outbound': 'any', 'server': <direct>}` rule here.
+    // sing-box 1.12 deprecated outbound DNS rule items and removes them in
+    // 1.14; the same resolver is published as `route.default_domain_resolver`
+    // instead, which route() picks with the identical preference.
     if (directServerTags.isNotEmpty) {
       dnsRuleSets.add(_buildInRuleSet("geosite", "ir"));
       rules.add({
@@ -617,7 +767,7 @@ class SingboxConfigBuilder {
     final strategy = setting.ipStrategy.name;
 
     dynamic final_;
-    if (resolveMode == SettingConfigItemDNSProxyResolveMode.fakeip) {
+    if (fakeIp) {
       servers.add({
         'tag': 'dns-fakeip',
         'type': 'fakeip',
@@ -629,11 +779,18 @@ class SingboxConfigBuilder {
         'server': 'dns-fakeip',
       });
       final_ = remoteServerTags.first;
-    } else if (resolveMode == SettingConfigItemDNSProxyResolveMode.proxy) {
+    } else if (resolveByProxy) {
       rules.add({
         'inbound': ['tun-in'],
         'server': remoteServerTags.first,
       });
+      final_ = remoteServerTags.first;
+    } else if (setting.dns.enableFinalResolveByProxy &&
+        remoteDetour != null &&
+        remoteServerTags.isNotEmpty) {
+      // "Resolve the final through the proxy" in its own right: the fallback
+      // resolver has to be a detoured one, so reuse the remote list instead
+      // of the direct one.
       final_ = remoteServerTags.first;
     } else {
       final_ = directServerTags.isNotEmpty ? directServerTags.first : remoteServerTags.first;
@@ -650,8 +807,13 @@ class SingboxConfigBuilder {
     return ReturnResult(data: dns);
   }
 
+  /// [detour] routes this server's queries through an outbound instead of
+  /// dialling them directly. This is what makes "resolve via the connected
+  /// profile" actually happen — without it, `proxyResolveMode: proxy` only
+  /// picks a different resolver but still sends the query out on the local
+  /// network, where it can be poisoned.
   static Map<String, dynamic> _dnsServerFromUrl(
-      String tag, String url, String? addressResolver) {
+      String tag, String url, String? addressResolver, {String? detour}) {
     String address = url;
     String type = "udp";
     String server = url;
@@ -693,6 +855,9 @@ class SingboxConfigBuilder {
     if (addressResolver != null && addressResolver.isNotEmpty) {
       out['domain_resolver'] = addressResolver;
     }
+    if (detour != null && detour.isNotEmpty) {
+      out['detour'] = detour;
+    }
     return out;
   }
 
@@ -717,6 +882,15 @@ class SingboxConfigBuilder {
     forward.listen = setting.proxy.host;
     forward.listenPort = setting.proxy.mixedForwardPort;
     inbounds.add(forward);
+    // Loopback-only inbound reserved for latency scanners: while the VPN is
+    // up, scanner sockets dial it and get routed straight to the direct
+    // outbound (physical NIC), so measurements are never taken through the
+    // tunnel. Unreachable/unused while the VPN is off.
+    final scan = SingboxInboundMixedOptions();
+    scan.tag = "scan-in";
+    scan.listen = SingboxInboundMixedOptions.hostLocal;
+    scan.listenPort = setting.proxy.scanPort;
+    inbounds.add(scan);
     return inbounds;
   }
 
@@ -729,6 +903,76 @@ class SingboxConfigBuilder {
     kOutboundTagBlock,
     kOutboundTagDns,
   ];
+
+  /// Serverless mode (patterniha/Serverless-for-Iran) outbound tags. The
+  /// outbounds are emitted by outbounds() and referenced by the rules and
+  /// `final` of route() - both sides must agree on these tags.
+  static const kServerlessTcpFragment = 'tcp-fragment';
+  static const kServerlessTcpFragmentTls = 'tcp-fragment-tls';
+  static const kServerlessUdpNoises = 'udp-noises';
+
+  /// Networks v50 refuses to reach: DPI probe/honeypot ranges whose replies
+  /// burn the client's IP into the blocklist of every other visitor.
+  static const List<String> kServerlessBlockedCidrs = [
+    '10.10.34.0/24',
+    '2001:4188:2:600::/64',
+  ];
+
+  /// Direct outbounds carrying the fragment/noise masks (`finalmask` is a
+  /// Karing sing-box extension, verified with `sing-box check`). The values
+  /// are patterniha/Serverless-for-Iran v50, `Serverless-fragA.jsonc`.
+  ///
+  /// v50 masks the ClientHello twice - 6/98/1 byte pieces at 0 ms, then every
+  /// following packet as 114/1 byte pieces at 1 ms. One direct outbound
+  /// carries one mask in the patched core (a `packets` value containing "tls"
+  /// stops after the hello), so only the SNI-critical stage stays here;
+  /// fragB is the same mask with `0` in place of the first `6`.
+  ///
+  /// v50 routes nothing through tcp-fragment/udp-noises - both stay emitted
+  /// but unreferenced, like upstream keeps them, as the aggressive variants:
+  /// point the corresponding rule in route() at them to try one. The core
+  /// splits at most 512 chunks per write, which the 1-byte length list of
+  /// tcp-fragment outruns on writes bigger than that.
+  static List<dynamic> serverlessOutbounds() {
+    return [
+      {
+        'type': 'direct',
+        'tag': kServerlessTcpFragmentTls,
+        'finalmask': {
+          'tcp_split': true,
+          'packets': 'tlshello',
+          'lengths': ["6", "98", "1"],
+          'delays': ["0"],
+          // v50's maxSplit 0; the core counts whole writes before it stops
+          // fragmenting, and a tls mask stops at the hello either way.
+          'max_split': 0,
+        },
+      },
+      {
+        'type': 'direct',
+        'tag': kServerlessTcpFragment,
+        'finalmask': {
+          'tcp_split': true,
+          'packets': '1-1',
+          'lengths': ["1"],
+          'delays': ["1"],
+          'max_split': 201,
+        },
+      },
+      {
+        'type': 'direct',
+        'tag': kServerlessUdpNoises,
+        'finalmask': {
+          'udp_noise': true,
+          // v50 lists the same {rand: 1200-1230, delay: 10} noise 24 times
+          'noise_rand': '1200-1230',
+          'noise_delay': '10',
+          'noise_reset': 28,
+          'noise_count': 24,
+        },
+      },
+    ];
+  }
 
   static List<dynamic> outbounds(
       String unknownGroupTag,
@@ -755,23 +999,56 @@ class SingboxConfigBuilder {
       }
     }
     // selector / urltest groups are prepended by the caller via specialOutbound
+    if (tags.isEmpty) {
+      // sing-box refuses a selector/urltest without members
+      // ("initialize outbound[0]: missing tags"), which happens in serverless
+      // mode or with an empty profile.
+      tags.add(kOutboundTagDirect);
+    }
+    // A selector with no `default` uses its FIRST member, and the first member
+    // is AutoSelect — a URLTest group that re-picks the fastest node on its own.
+    // That silently overrode the node chosen in the server list: `selectOutbound`
+    // is the current selection, and it was passed in only to be ignored, so
+    // every connection went through AutoSelect and the exit node changed
+    // country by itself.
+    final selectedTag =
+        selectOutbound is Map ? selectOutbound['tag']?.toString() : null;
+    // The URLTest group is re-tagged to AutoSelect just below, so selecting the
+    // group itself has to be translated rather than copied.
+    final selectorDefault =
+        (selectedTag != null &&
+            selectedTag != kOutboundTagUrltest &&
+            tags.contains(selectedTag))
+        ? selectedTag
+        : kOutboundTagAutoSelect;
+    // `interrupt_exist_connections: false` on both groups: switching node must
+    // not tear down connections that are already running. AI assistants answer
+    // over long-lived streaming connections, so interrupting on every switch is
+    // what made them drop mid-answer and report a retry. With this off, a switch
+    // only affects connections opened afterwards. The cost is that connections
+    // to a node that has since died linger until they time out instead of being
+    // cut immediately.
     final selector = <String, dynamic>{
       'type': 'selector',
       'tag': kOutboundTagProxy,
       'outbounds': [kOutboundTagAutoSelect, ...tags],
-      'interrupt_exist_connections': true,
+      'default': selectorDefault,
+      'interrupt_exist_connections': false,
     };
     final urltest = <String, dynamic>{
       'type': 'urltest',
       'tag': kOutboundTagAutoSelect,
       'outbounds': tags,
       'tolerance': 50,
-      'interrupt_exist_connections': true,
+      'interrupt_exist_connections': false,
     };
+    // `block` and `dns` are deliberately absent: sing-box 1.11 deprecated both
+    // special outbounds in favour of the `reject` and `hijack-dns` rule
+    // actions, and removes them in 1.13. Every use of them was a route-rule
+    // target, so they migrate cleanly to actions. `direct` is an ordinary
+    // outbound and stays.
     final tail = <Map<String, dynamic>>[
       {'type': 'direct', 'tag': kOutboundTagDirect},
-      {'type': 'block', 'tag': kOutboundTagBlock},
-      {'type': 'dns', 'tag': kOutboundTagDns},
     ];
     final tailTags = tail.map((e) => e['tag'] as String).toSet();
     outbounds.removeWhere((ob) => tailTags.contains(ob['tag']));
@@ -781,6 +1058,13 @@ class SingboxConfigBuilder {
       ...outbounds,
       ...tail,
     ];
+    // Serverless mode (patterniha/Serverless-for-Iran): route() points `final`
+    // and its fragment/noise rules at these, so they have to be emitted with
+    // the rest of the outbounds instead of being appended to the (already
+    // consumed) inbound list from route().
+    if (SettingManager.getConfig().tls.enableServerless) {
+      result.addAll(serverlessOutbounds());
+    }
     _applyPattFragment(result, type);
     _applySniSpoofing(result);
     return result;
@@ -825,17 +1109,28 @@ class SingboxConfigBuilder {
       // the presented cert can never match the fake SNI — skip verification
       // (this is inherent to the method; PattNG does the same)
       tls['insecure'] = true;
-      // ensure the real domain survives in the transport Host header
+      // ensure the real domain survives in the transport Host header.
+      // NOTE: ws transport has no `host` field (sing-box 1.11+ rejects it
+      // with "unknown field"), so always use `headers.Host` there.
       final tr = ob['transport'];
       if (tr is Map) {
+        final type = tr['type']?.toString() ?? '';
         final headers = tr['headers'];
         if (headers is Map) {
           if (!headers.values.any(
               (v) => v.toString().toLowerCase() == server.toLowerCase())) {
             headers['Host'] = server;
           }
-        } else if (tr['host'] == null || tr['host'].toString().isEmpty) {
-          tr['host'] = server;
+        } else if (type == 'ws') {
+          tr['headers'] = {'Host': server};
+        } else if (type == 'http' || type == 'httpupgrade') {
+          if (tr['host'] == null || tr['host'].toString().isEmpty) {
+            tr['host'] = server;
+          }
+        } else {
+          // ws/grpc have no `host` field in sing-box 1.11+ — keep the
+          // domain in the Host header instead.
+          tr['headers'] = {'Host': server};
         }
       }
     }
@@ -855,14 +1150,26 @@ class SingboxConfigBuilder {
       final tls = ob['tls'] as Map<String, dynamic>;
       tls['fragment'] = true;
       tls['record_fragment'] = true;
-      tls['fragment_sizes'] = SettingConfigItemTLS.kFragmentSizesPatt;
-      tls['fragment_delays'] = SettingConfigItemTLS.kFragmentDelaysPatt;
-      tls['fragment_max_split'] = SettingConfigItemTLS.kFragmentMaxSplitPatt;
-      tls['cipher_suites'] = SettingConfigItemTLS.kCipherSuitesPatt.split(':');
-      tls['utls'] = {
+      // Fill the gaps only. A config that ships its own fragment tuning keeps
+      // it — replacing it with the preset is what broke every Cloudflare
+      // Workers node, whose own `fm=` lengths are tuned for its edge.
+      tls['fragment_sizes'] ??= SettingConfigItemTLS.kFragmentSizesPatt;
+      tls['fragment_delays'] ??= SettingConfigItemTLS.kFragmentDelaysPatt;
+      tls['fragment_max_split'] ??= SettingConfigItemTLS.kFragmentMaxSplitPatt;
+      tls['cipher_suites'] ??= SettingConfigItemTLS.kCipherSuitesPatt.split(':');
+      tls['utls'] ??= {
         'enabled': true,
         'fingerprint': 'chrome',
       };
+      if (kDiagnosticLogging) {
+        // Records what each node actually went out with. `sizes` is the
+        // discriminator: the generic Patt preset means the node's own `fm=`
+        // was never seen, which is the failure this was added to chase.
+        Log.w(
+          "tlsTuning type=$type tag=${ob['tag']} server=${ob['server']} "
+          "sni=${tls['server_name']} sizes=${tls['fragment_sizes']}",
+        );
+      }
     }
   }
 
@@ -889,17 +1196,45 @@ class SingboxConfigBuilder {
     final rules = <dynamic>[];
     final ruleSets = <dynamic>[];
 
-    // hijack dns
+    // Scanner channel: everything arriving on the loopback scan inbound goes
+    // straight out the direct outbound so probes measure the physical path,
+    // not the tunnel. Must be the first rule so nothing diverts it.
+    rules.add({
+      'inbound': ['scan-in'],
+      'outbound': kOutboundTagDirect,
+    });
+
+    // Sniff before any domain-based rule. In sing-box 1.11+ the inbound `sniff`
+    // field is gone; the `sniff` action is the only way, and without it the
+    // domain rules below can never match on a TUN inbound.
+    //
+    // This is what made Iran routing look broken under TUN. Through the mixed
+    // port the client sends the hostname in the request, so `geosite-ir` matches
+    // on the domain. TUN delivers raw IP packets — no hostname anywhere — so only
+    // `geoip-ir` could match, and the moment DNS answered with a foreign address
+    // (which "resolve through proxy" does for anything outside geosite-ir) the
+    // traffic had nothing left to route it direct. Sniffing recovers the SNI.
+    //
+    // `sniff` is not a final action, so matching continues with the next rule.
+    if (tunMode || setting.tls.enableServerless) {
+      rules.add({
+        'action': 'sniff',
+        'sniffer': ['tls', 'http', 'quic'],
+      });
+    }
+
+    // hijack dns — `hijack-dns` rule action replaces the legacy `dns` outbound
+    // (sing-box 1.11; the outbound is removed in 1.13).
     if (tunMode || setting.tun.hijackDns) {
       rules.add({
         'inbound': ['tun-in'],
         'protocol': 'dns',
-        'outbound': kOutboundTagDns,
+        'action': 'hijack-dns',
       });
     }
     rules.add({
       'protocol': 'dns',
-      'outbound': kOutboundTagDns,
+      'action': 'hijack-dns',
     });
 
     // Iran mode: domestic traffic direct, Iranian ads blocked. Runs before
@@ -910,7 +1245,7 @@ class SingboxConfigBuilder {
       ruleSets.add(_buildInRuleSet("geosite", "ir"));
       rules.add({
         'rule_set': [_ruleSetTag("category-ads-ir", "geosite")],
-        'outbound': kOutboundTagBlock,
+        'action': 'reject',
       });
       rules.add({
         'rule_set': [
@@ -968,12 +1303,15 @@ class SingboxConfigBuilder {
             r['outbound'] = kOutboundTagDirect;
             break;
           case 'block':
-            r['outbound'] = kOutboundTagBlock;
+            // A diversion rule that blocks becomes a `reject` action rather
+            // than pointing at the legacy `block` outbound.
+            r['action'] = 'reject';
             break;
           default:
             r['outbound'] = rule.outbound;
         }
-        if (r.isNotEmpty && r.containsKey('outbound')) {
+        if (r.isNotEmpty &&
+            (r.containsKey('outbound') || r.containsKey('action'))) {
           rules.add(r);
         }
       }
@@ -985,70 +1323,46 @@ class SingboxConfigBuilder {
       'final': kOutboundTagProxy,
       'auto_detect_interface': true,
     };
-    // Serverless mode (patterniha/Serverless-for-Iran): sniffed TLS and
-    // port-443 TCP go through a fragmenting direct outbound, QUIC is blocked
-    // to force TCP, ir/private stay direct, and UDP gets noise. The final
-    // outbound becomes the fragment/direct chain instead of the proxy.
-    final tlsSetting0 = setting.tls;
-    if (tlsSetting0.enableServerless) {
-      final lowDelay = tlsSetting0.serverlessLowDelay;
-      allOutBounds.add({
-        'type': 'direct',
-        'tag': 'tcp-fragment-tls',
-        'finalmask': {
-          'tcp_split': true,
-          'packets': 'tlshello',
-          'lengths': lowDelay ? ["5", "1"] : ["5", "94", "1"],
-          'delays': lowDelay ? ["0"] : ["0", "1"],
-          'max_split': 522,
-        },
-      });
-      allOutBounds.add({
-        'type': 'direct',
-        'tag': 'tcp-fragment',
-        'finalmask': {
-          'tcp_split': true,
-          'packets': '1-1',
-          'lengths': ["1"],
-          'delays': ["1"],
-          'max_split': 419,
-        },
-      });
-      allOutBounds.add({
-        'type': 'direct',
-        'tag': 'udp-noises',
-        'finalmask': {
-          'udp_noise': true,
-          'noise_rand': '1200-1230',
-          'noise_delay': '10',
-          'noise_reset': 28,
-        },
-      });
+    // Serverless mode (patterniha/Serverless-for-Iran v50): the ClientHello of
+    // every TLS flow is fragmented on its way out, QUIC and UDP/443 are killed
+    // so browsers fall back to TCP-443, the DPI honeypot ranges are refused,
+    // and everything else leaves through the plain direct outbound. The mask
+    // carriers come from serverlessOutbounds().
+    //
+    // These rules are appended after the diversion/user rules, so an Iranian
+    // or LAN destination picked up by the region preset stays direct and
+    // unmasked - the same split v50 makes with its ir/private tcp-direct rules.
+    if (setting.tls.enableServerless) {
+      // v50 sniffs the first packet of every flow (Xray does it on the
+      // inbound); without it the protocol rules below never match. The sniff
+      // action itself is added near the top of this list, so the domain rules
+      // see it too — see the comment there.
       rules.add({
-        'protocol': ['tls'],
-        'network': 'tcp',
-        'outbound': 'tcp-fragment-tls',
-      });
-      rules.add({
-        'port': [443],
-        'network': 'tcp',
-        'outbound': 'tcp-fragment-tls',
+        'ip_cidr': kServerlessBlockedCidrs,
+        'action': 'reject',
       });
       rules.add({
         'protocol': ['quic'],
         'network': 'udp',
-        'outbound': kOutboundTagBlock,
+        'action': 'reject',
       });
       rules.add({
         'port': [443],
         'network': 'udp',
-        'outbound': kOutboundTagBlock,
+        'action': 'reject',
       });
       rules.add({
-        'network': 'udp',
-        'outbound': 'udp-noises',
+        'protocol': ['tls'],
+        'network': 'tcp',
+        'outbound': kServerlessTcpFragmentTls,
       });
-      route['final'] = 'tcp-fragment';
+      rules.add({
+        'port': [443],
+        'network': 'tcp',
+        'outbound': kServerlessTcpFragmentTls,
+      });
+      // v50's tcp-direct/udp-direct catch-alls, one sing-box `direct` is enough
+      route['final'] = kOutboundTagDirect;
     }
     // dedupe rule-set definitions (Iran block + DNS rule + diversion groups
     // can reference the same code)
@@ -1060,10 +1374,29 @@ class SingboxConfigBuilder {
       }
     }
     route['rule_set'] = dedupedRuleSets;
-    if (dns != null && dns['servers'] is List && (dns['servers'] as List).isNotEmpty) {
-      route['default_domain_resolver'] = {
-        'server': (dns['servers'] as List).first['tag'],
-      };
+    // This resolves the addresses of outbound servers, so it must never be a
+    // detoured resolver: a node whose address is a domain would otherwise need
+    // the proxy that is still being built. It also takes over the bootstrap
+    // role of the removed `{'outbound': 'any'}` DNS rule, which sent those
+    // lookups to the direct resolver — so an undetoured *direct* server wins
+    // over an undetoured remote one, which only matters in FakeIP and Direct
+    // modes where nothing is detoured at all.
+    final dnsServers =
+        (dns != null && dns['servers'] is List) ? dns['servers'] as List : const [];
+    String? firstDirect;
+    String? firstUndetoured;
+    for (final s in dnsServers) {
+      if (s is! Map || s['tag'] == null) continue;
+      if (s['detour'] != null && (s['detour'] as String).isNotEmpty) continue;
+      final tag = s['tag'].toString();
+      firstUndetoured ??= tag;
+      if (tag.startsWith('dns-direct-')) {
+        firstDirect ??= tag;
+      }
+    }
+    final bootstrapResolver = firstDirect ?? firstUndetoured;
+    if (bootstrapResolver != null) {
+      route['default_domain_resolver'] = {'server': bootstrapResolver};
     }
 
     return route;

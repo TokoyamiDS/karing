@@ -4,6 +4,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:karing/app/utils/scan_dialer.dart';
+
 /// Official Cloudflare CIDR ranges (https://www.cloudflare.com/ips/),
 /// pinned at build time. IPv6 ranges are only used for classification of
 /// literal addresses; the scanner samples IPv4 ranges only.
@@ -276,9 +278,10 @@ class CloudflareDetector {
   /// domains only when a cached verdict exists.
   static bool? checkSync(String host) => cached(host);
 
-  /// Full check: resolves domains (through the system resolver) and tests
-  /// every address against the CF ranges. Never throws; returns null when
-  /// the host cannot be resolved.
+  /// Full check: resolves domains (through the direct path — the core's DNS
+  /// while the VPN runs so FakeIP answers can never poison the verdict) and
+  /// tests every address against the CF ranges. Never throws; returns null
+  /// when the host cannot be resolved.
   static Future<bool?> check(String host) async {
     final h = host.trim();
     if (h.isEmpty) {
@@ -296,14 +299,16 @@ class CloudflareDetector {
     }
     _pending.add(h);
     try {
-      final addrs = await InternetAddress.lookup(h)
-          .timeout(const Duration(seconds: 3));
+      final addrs = await ScanDialer.resolve(h);
       bool any = false;
       for (final a in addrs) {
         if (CloudflareRanges.isCloudflareLiteral(a.address)) {
           any = true;
           break;
         }
+      }
+      if (addrs.isEmpty) {
+        return null;
       }
       _cache[h] = any;
       for (final l in List.of(_listeners)) {
@@ -324,9 +329,20 @@ class CloudflareDetector {
   }
 }
 
+/// ALPN offered for the /cdn-cgi/trace request below.
+///
+/// It must NOT advertise `h2`. The request is written as HTTP/1.1 text, so
+/// when `h2` is negotiated Cloudflare answers with binary HTTP/2 frames and
+/// the `fl=`/`colo=` check never matches — every IP, however healthy, was
+/// reported as dead. Measured against live CF edges: `["h2","http/1.1"]`
+/// yields ALPN `h2`, 57 bytes of frame data, no `fl=`; `["http/1.1"]` yields
+/// ~1000 bytes containing `fl=` and `colo=`.
+const List<String> kCfTraceAlpn = ["http/1.1"];
+
 /// Confirms an IP is a live Cloudflare edge by opening TLS :443 with SNI
 /// [probeHost] and requesting the /cdn-cgi/trace endpoint, which only CF
-/// answers (contains `fl=` and `colo=` lines).
+/// answers (contains `fl=` and `colo=` lines). The connection is made on the
+/// direct path (see ScanDialer) so VPN tunnels cannot distort the result.
 Future<CfProbeResult> cfProbeTrace(
   String ip, {
   String probeHost = "speed.cloudflare.com",
@@ -336,19 +352,18 @@ Future<CfProbeResult> cfProbeTrace(
   final sw = Stopwatch()..start();
   SecureSocket? socket;
   try {
-    final raw = await Socket.connect(ip, 443, timeout: timeout);
+    final raw = await ScanDialer.connect(ip, 443, timeout: timeout);
     try {
       socket = await SecureSocket.secure(
         raw,
         host: probeHost,
         onBadCertificate: (_) => true,
-        supportedProtocols: const ["h2", "http/1.1"],
+        supportedProtocols: kCfTraceAlpn,
       ).timeout(timeout);
     } catch (err) {
       raw.destroy();
       rethrow;
     }
-    sw.stop();
     final tlsMs = sw.elapsedMilliseconds;
 
     final req = "GET /cdn-cgi/trace HTTP/1.1\r\n"
@@ -359,6 +374,7 @@ Future<CfProbeResult> cfProbeTrace(
         "\r\n";
     socket.add(req.codeUnits);
     final body = await _readAll(socket, timeout);
+    sw.stop();
     await socket.close();
     socket.destroy();
 
@@ -382,8 +398,8 @@ Future<CfProbeResult> cfProbeTrace(
     return CfProbeResult(
       ip: ip,
       ok: isCf,
-      latencyMs: tlsMs,
-      totalMs: 0,
+      latencyMs: sw.elapsedMilliseconds,
+      totalMs: tlsMs,
       colo: colo,
       exitIp: ip0,
       warp: warp,

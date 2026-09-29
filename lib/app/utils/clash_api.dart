@@ -127,6 +127,44 @@ class ClashApi {
     }
   }
 
+  /// Fetches [url] **through one named outbound**, via the core's
+  /// `GET /proxies/{name}/http` endpoint.
+  ///
+  /// [getHttpRequestByProxy] cannot do this: it points an `HttpClient` at the
+  /// mixed port, so the request is routed by the rules to whatever node happens
+  /// to be *selected*. Every row of a per-node lookup therefore reported the same
+  /// exit IP, and it only changed when the selection did. This asks the core to
+  /// dial the named node instead.
+  static Future<ReturnResult<HttpRequestResponse>> getHttpRequestByProxyTag(
+    int controlPort,
+    String tag,
+    String url, {
+    int timeoutMs = 5000,
+  }) async {
+    final result = HttpRequestResponse();
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = Duration(milliseconds: timeoutMs + 3000);
+      final uri = _uri(controlPort, '/proxies/${Uri.encodeComponent(tag)}/http',
+          {'timeout': '$timeoutMs', 'url': url});
+      final req = await client.getUrl(uri);
+      final res = await req.close();
+      final body = await res.transform(utf8.decoder).join();
+      client.close(force: true);
+      if (res.statusCode != 200) {
+        return ReturnResult(
+          error: ReturnResultError(_errFromBody(body, res.statusCode)),
+        );
+      }
+      final json = jsonDecode(body);
+      result.statusCode = int.tryParse(json['status']?.toString() ?? '') ?? 0;
+      result.body = json['body']?.toString() ?? '';
+      return ReturnResult(data: result);
+    } catch (err) {
+      return ReturnResult(error: ReturnResultError(err.toString()));
+    }
+  }
+
   /// queries the sing-box dns through the clash api compatible endpoint.
   /// [request] servers: list of SingboxDNSServerBatchOptions-like maps.
   static Future<ReturnResult<Tuple2<String, String>>> dnsQuery(

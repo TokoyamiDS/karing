@@ -1,5 +1,19 @@
 import 'package:flutter/widgets.dart';
 
+/// sing-box only implements the XTLS Vision flow. Xray/v2rayN links carry
+/// other flow values — e.g. the `xtls-rprx-vision-udp443` UDP/443 variant or
+/// legacy `xtls-rprx-direct`/`splice` modes — and the core aborts the whole
+/// config with "unsupported flow" on anything it does not know. Map the
+/// known alias to Vision and drop every other flow so one bad node can never
+/// prevent the service from starting.
+String normalizeVlessFlow(String? value) {
+  final flow = (value ?? '').trim().toLowerCase();
+  if (flow == 'xtls-rprx-vision' || flow == 'xtls-rprx-vision-udp443') {
+    return 'xtls-rprx-vision';
+  }
+  return '';
+}
+
 /// sing-box outbound option models.
 class SingboxOutboundType {
   static const String shadowsocks = "shadowsocks";
@@ -225,7 +239,8 @@ class SingboxOutboundVLESSOptions extends SingboxOutboundProtocolBase {
   Map<String, dynamic> toJson() {
     final out = super.toJson();
     out['uuid'] = uuid;
-    if (flow != null && flow!.isNotEmpty) out['flow'] = flow;
+    final normalizedFlow = normalizeVlessFlow(flow);
+    if (normalizedFlow.isNotEmpty) out['flow'] = normalizedFlow;
     return out;
   }
 
@@ -234,7 +249,7 @@ class SingboxOutboundVLESSOptions extends SingboxOutboundProtocolBase {
     super.fromJson(map);
     if (map == null) return;
     uuid = map['uuid']?.toString();
-    flow = map['flow']?.toString();
+    flow = normalizeVlessFlow(map['flow']?.toString());
   }
 }
 
@@ -633,10 +648,16 @@ class SingboxOutboundTLSOptions {
     if (cipherSuites.isNotEmpty) out['cipher_suites'] = cipherSuites;
     if (certificate.isNotEmpty) out['certificate'] = certificate;
     if (echEnabled) {
-      out['ech'] = {
-        'enabled': true,
-        if (echConfig.isNotEmpty) 'config': echConfig
-      };
+      // A non-PEM ech.config makes the core abort startup entirely
+      // ("FATAL initialize outbound[N]: invalid ECH configs pem"), so never emit one.
+      // Empty config stays enabled: the core then resolves ECH from DNS, as before.
+      final echIsPem = echConfig.contains('-----BEGIN');
+      if (echIsPem || echConfig.isEmpty) {
+        out['ech'] = {
+          'enabled': true,
+          if (echIsPem) 'config': echConfig
+        };
+      }
     }
     if (fragment) out['fragment'] = true;
     if (fragmentFallbackDelay.isNotEmpty) {
@@ -830,6 +851,17 @@ class SingboxOutboundTransportOptions {
     if (map['headers'] is Map) {
       headers = (map['headers'] as Map)
           .map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+    // sing-box ws transport has no `host` field (strict decode rejects it
+    // since 1.11): fold legacy host values into the Host header.
+    if (type == 'ws' && host.isNotEmpty) {
+      final hasHost =
+          headers.keys.any((k) => k.toLowerCase() == 'host');
+      if (!hasHost) {
+        headers['Host'] =
+            host.split(',').map((e) => e.trim()).firstWhere((e) => e.isNotEmpty, orElse: () => host);
+      }
+      host = '';
     }
   }
 }

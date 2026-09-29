@@ -29,6 +29,7 @@ import 'package:karing/app/utils/path_utils.dart';
 import 'package:karing/app/utils/platform_utils.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
 import 'package:karing/app/utils/singbox_config_builder.dart';
+import 'package:karing/i18n/strings.g.dart';
 
 class VPNServiceSetServerOptions {
   String disabledServerError = "";
@@ -72,6 +73,22 @@ class VPNService {
   static Process? _windowsProcess;
   static StreamSubscription? _windowsProcessExitSub;
   static bool _windowsStopping = false;
+
+  /// Serializes the Windows core lifecycle (start/restart/stop): two entry
+  /// points racing here is what produced duplicate cores and stale
+  /// "connected" events. Every method queues behind the previous one.
+  static Future<void> _windowsLifecycleTail = Future<void>.value();
+
+  /// Monotonic token. A start/stop completion only publishes a state event
+  /// when its token is still the newest, so an obsolete operation can never
+  /// overwrite the state of the one that replaced it.
+  static int _windowsLifecycleGeneration = 0;
+
+  static Future<T> _windowsLifecycle<T>(Future<T> Function() op) {
+    final run = _windowsLifecycleTail.then((_) => op());
+    _windowsLifecycleTail = run.then((_) {}, onError: (_) {});
+    return run;
+  }
 
   static final List<
     void Function(FlutterVpnServiceState state, Map<String, String> params)
@@ -126,6 +143,13 @@ class VPNService {
     });
 
     if (Platform.isWindows) {
+      // A crash, forced quit, or a leftover core holds the mixed/control ports
+      // and slows the machine down while the UI believes it is disconnected.
+      // Clean the recorded PID before stop() deletes the pid file. Respect
+      // `disconnectWhenQuit=false`, where the core is intentionally kept.
+      if (SettingManager.getConfig().proxy.disconnectWhenQuit) {
+        await _windowsKillOrphanCore();
+      }
       await stop();
     }
   }
@@ -159,6 +183,22 @@ class VPNService {
 
   static Future<bool> getTunMode() async {
     final setting = SettingManager.getConfig();
+    if (!setting.tun.enable) {
+      return false;
+    }
+    // Windows only: another client already owns a tunnel. Adding ours would give
+    // the machine two competing default routes and two DNS rewrites, which is
+    // what makes Windows decide connectivity is lost and reset the WLAN adapter.
+    // Fall back to the system proxy rather than provoking that.
+    //
+    // Skippable: the detection can false-positive, and the user has no other way
+    // out, so the warning dialog's Bypass sets `ignoreForeignTunnel`.
+    if (Platform.isWindows &&
+        !setting.tun.ignoreForeignTunnel &&
+        await NetworkUtils.hasForeignTunnel()) {
+      Log.w("getTunMode: a foreign tunnel is present, running without TUN");
+      return false;
+    }
     if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
       return setting.tun.enable;
     }
@@ -199,23 +239,38 @@ class VPNService {
     String? secret,
     String savePath,
   ) async {
-    if (current.type == kOutboundTypeSpecial && current.raw.isEmpty) {
-      return ReturnResultError(options.disabledServerError);
-    }
-    if (current.groupid.isEmpty) {
-      return ReturnResultError(options.invalidServerError);
+    // Serverless mode (patterniha/Serverless-for-Iran) needs no proxy server:
+    // every connection leaves through the fragment/noise direct chain, so an
+    // empty or missing selection must not abort the config build.
+    final serverless = SettingManager.getConfig().tls.enableServerless;
+    if (!serverless) {
+      if (current.type == kOutboundTypeSpecial && current.raw.isEmpty) {
+        return ReturnResultError(options.disabledServerError);
+      }
+      if (current.groupid.isEmpty) {
+        return ReturnResultError(options.invalidServerError);
+      }
     }
     await _extractRuleSets();
     final tunMode = await getTunMode();
+    // Only the runtime config needs ports that are actually usable; an exported
+    // config is meant to run elsewhere and must keep the ports the user chose.
+    if (savePath == await PathUtils.serviceCoreConfigFilePath()) {
+      await SettingManager.ensureCorePortsAvailable();
+    }
     final setting = SettingManager.getConfig();
     Log.w(
       "setServer: type=${current.type} tag=${current.tag} groupid=${current.groupid} "
-      "rawEmpty=${current.raw.isEmpty} groups=${ServerManager.getConfig().items.length}",
+      "server=${current.server}:${current.serverport} rawEmpty=${current.raw.isEmpty} "
+      "groups=${ServerManager.getConfig().items.length}",
     );
 
     final config = SingboxConfig();
     final selectOutbound = SingboxConfigBuilder.buildOutbound(current);
-    if (selectOutbound == null) {
+    if (selectOutbound == null && !serverless) {
+      // A node that exists but produces no outbound is a broken config, not a
+      // missing selection. The caller folds the tag into the localized
+      // invalidServer message, and the log above carries the dial details.
       return ReturnResultError(options.invalidServerError);
     }
 
@@ -309,7 +364,13 @@ class VPNService {
     );
 
     final encoder = const JsonEncoder.withIndent('  ');
-    String content = encoder.convert(config.toJson());
+    // Sanitize the fully assembled config, not only individual nodes. Raw
+    // imported profiles can bypass the typed outbound model during aggregate
+    // construction and otherwise reintroduce Xray-only flow aliases.
+    final normalizedConfig = SingboxConfigBuilder.normalizeConfigCompatibility(
+      config.toJson(),
+    );
+    String content = encoder.convert(normalizedConfig);
     try {
       final file = File(savePath);
       await file.parent.create(recursive: true);
@@ -445,13 +506,74 @@ class VPNService {
     return path.join(PathUtils.exeDir(), "sing-box.exe");
   }
 
-  static Future<void> _windowsStopCore() async {
+  /// PID file records the core we spawned so an orphan left by a crash or a
+  /// previous run can be cleaned up on the next launch. Never kills a process
+  /// unless its image name is our core.
+  static Future<String> _windowsPidFilePath() async {
+    final dir = await PathUtils.profileDir();
+    return path.join(dir, "sing-box.pid");
+  }
+
+  static Future<void> _windowsWritePid(int pid) async {
+    try {
+      await File(await _windowsPidFilePath()).writeAsString(
+        pid.toString(),
+        flush: true,
+      );
+    } catch (_) {}
+  }
+
+  static Future<void> _windowsDeletePid() async {
+    try {
+      final f = File(await _windowsPidFilePath());
+      if (await f.exists()) {
+        await f.delete();
+      }
+    } catch (_) {}
+  }
+
+  /// Kills a core left behind by a previous app instance (crash, forced
+  /// quit, `disconnectWhenQuit=false`). Only the PID we recorded is targeted,
+  /// and only when it still resolves to a `sing-box.exe` image.
+  static Future<void> _windowsKillOrphanCore() async {
+    try {
+      final f = File(await _windowsPidFilePath());
+      if (!await f.exists()) {
+        return;
+      }
+      final pid = int.tryParse((await f.readAsString()).trim());
+      await f.delete();
+      if (pid == null || pid <= 0 || pid == _windowsProcess?.pid) {
+        return;
+      }
+      final r = await Process.run("tasklist", [
+        "/FI",
+        "PID eq $pid",
+        "/FO",
+        "CSV",
+        "/NH",
+      ]);
+      final out = (r.stdout ?? "").toString().toLowerCase();
+      if (!out.contains("sing-box.exe")) {
+        return;
+      }
+      Log.w("_windowsKillOrphanCore: killing orphan sing-box pid=$pid");
+      await Process.run("taskkill", ["/PID", "$pid", "/T", "/F"]);
+    } catch (_) {}
+  }
+
+  /// Stops the tracked core. Does not emit `disconnected` unless [notify] is
+  /// set: the start path stops quietly and only publishes `connected` once
+  /// the new core is ready, so a stale `disconnected` can no longer overwrite
+  /// it during a reload.
+  static Future<void> _windowsStopCore({bool notify = true}) async {
     final process = _windowsProcess;
     _windowsProcess = null;
     _windowsProcessExitSub?.cancel();
     _windowsProcessExitSub = null;
     ClashApi.connectionsStartTime = null;
     ClashApi.resetConnectionsStats();
+    await _windowsDeletePid();
     if (process != null) {
       _windowsStopping = true;
       try {
@@ -491,15 +613,49 @@ class VPNService {
       }
       break;
     }
-    FlutterVpnService.notifyState(FlutterVpnServiceState.disconnected);
+    if (notify) {
+      FlutterVpnService.notifyState(FlutterVpnServiceState.disconnected);
+    }
   }
 
   /// Runs sing-box.exe as a subprocess. sing-box listens on the mixed port;
   /// readiness is detected by polling it.
+  ///
+  /// Callers must hold the Windows lifecycle lock. Inputs are validated before
+  /// the current core is stopped, so a bad config no longer takes down a
+  /// healthy running core.
+  /// Windows refuses to bind a port that falls inside a WinNAT / Hyper-V
+  /// reserved range with "an attempt was made to access a socket in a way
+  /// forbidden by its access permissions" — which reads like a permissions
+  /// problem and sends people looking in the wrong place. It is the most
+  /// common reason the core starts and then nothing can connect, so replace
+  /// the raw text with something actionable.
+  /// Exposed for testing: a false positive here would replace a genuine
+  /// startup error with a misleading message.
+  static bool isReservedPortFailure(String detail) {
+    final d = detail.toLowerCase();
+    return d.contains('bind:') &&
+        (d.contains('access permissions') ||
+            d.contains('only one usage') ||
+            d.contains('forbidden'));
+  }
+
+  /// [detail] is the core's stderr; keep it verbatim unless it is the
+  /// reserved-port case, where the raw text misleads.
+  static String _coreStartErrorMessage(String detail, int port) {
+    if (isReservedPortFailure(detail)) {
+      Log.w("_windowsStartCore: reserved port $port, core stderr=$detail");
+      return t.HomeScreen.corePortReserved(port: port);
+    }
+    if (detail.length > 1024) {
+      return detail.substring(0, 1024);
+    }
+    return detail.isEmpty ? "core exited" : detail;
+  }
+
   static Future<ReturnResultError?> _windowsStartCore(
     Duration timeout,
   ) async {
-    await _windowsStopCore();
     final coreExe = _windowsCoreExePath();
     if (!await File(coreExe).exists()) {
       return ReturnResultError("core not found: $coreExe");
@@ -508,7 +664,10 @@ class VPNService {
     if (!await File(configPath).exists()) {
       return ReturnResultError("core config not found: $configPath");
     }
-    Log.w("_windowsStartCore: exe=$coreExe config=$configPath");
+    final generation = ++_windowsLifecycleGeneration;
+    // stop quietly; only publish connected once the new core is ready
+    await _windowsStopCore(notify: false);
+    Log.w("_windowsStartCore: exe=$coreExe config=$configPath gen=$generation");
     final logPath = await PathUtils.serviceLogFilePath();
     final errPath = await PathUtils.serviceStdErrorFilePath();
     try {
@@ -537,6 +696,7 @@ class VPNService {
     Log.w("_windowsStartCore: spawned pid=${process.pid}");
     _windowsProcess = process;
     _windowsStopping = false;
+    await _windowsWritePid(process.pid);
     process.stdout.listen(
       (data) => FileUtils.append(
         logPath,
@@ -554,35 +714,27 @@ class VPNService {
       onError: (err) {},
     );
     final spawnedPid = process.pid;
+    final mixedPort = SettingManager.getConfig().proxy.mixedRulePort;
     _windowsProcessExitSub = process.exitCode.asStream().listen((code) async {
       Log.w("_windowsStartCore: process $spawnedPid exited code=$code");
-      if (!_windowsStopping) {
+      // only react to the process we are still tracking; a newer start may
+      // already have replaced it.
+      if (!_windowsStopping && identical(_windowsProcess, process)) {
         _windowsProcess = null;
-        String detail = stderrBuffer.toString().trim();
-        if (detail.length > 1024) {
-          detail = detail.substring(0, 1024);
-        }
+        await _windowsDeletePid();
         FlutterVpnService.notifyState(
           FlutterVpnServiceState.disconnected,
-          detail.isEmpty
-              ? {"message": "core exited code=$code"}
-              : {"message": detail},
+          {"message": _coreStartErrorMessage(stderrBuffer.toString().trim(), mixedPort)},
         );
       }
     });
 
     final deadline = DateTime.now().add(timeout);
-    final mixedPort = SettingManager.getConfig().proxy.mixedRulePort;
     while (DateTime.now().isBefore(deadline)) {
-      if (_windowsProcess != process) {
-        String detail = stderrBuffer.toString().trim();
-        if (detail.length > 1024) {
-          detail = detail.substring(0, 1024);
-        }
+      if (!identical(_windowsProcess, process)) {
+        final detail = stderrBuffer.toString().trim();
         Log.w("_windowsStartCore: poll abort, core gone, detail=$detail");
-        return ReturnResultError(
-          detail.isEmpty ? "core exited" : detail,
-        );
+        return ReturnResultError(_coreStartErrorMessage(detail, mixedPort));
       }
       try {
         final socket = await Socket.connect(
@@ -591,6 +743,13 @@ class VPNService {
           timeout: const Duration(milliseconds: 300),
         );
         socket.destroy();
+        // A newer start/stop may have superseded this one while we polled;
+        // never publish a state for an obsolete core.
+        if (generation != _windowsLifecycleGeneration ||
+            !identical(_windowsProcess, process)) {
+          Log.w("_windowsStartCore: superseded before ready, gen=$generation");
+          return ReturnResultError("superseded");
+        }
         Log.w("_windowsStartCore: ready on $mixedPort");
         ClashApi.connectionsStartTime = DateTime.now();
         FlutterVpnService.notifyState(FlutterVpnServiceState.connected);
@@ -599,15 +758,14 @@ class VPNService {
         await Future.delayed(const Duration(milliseconds: 200));
       }
     }
-    await _windowsStopCore();
-    String detail = stderrBuffer.toString().trim();
-    if (detail.length > 2048) {
-      detail = detail.substring(0, 2048);
-    }
+    await _windowsStopCore(notify: false);
+    final detail = stderrBuffer.toString().trim();
     Log.w("_windowsStartCore: timeout, detail=$detail");
-    return ReturnResultError(
-      detail.isEmpty ? "service start timeout" : detail,
-    );
+    FlutterVpnService.notifyState(FlutterVpnServiceState.disconnected);
+    if (detail.isEmpty) {
+      return ReturnResultError("service start timeout");
+    }
+    return ReturnResultError(_coreStartErrorMessage(detail, mixedPort));
   }
 
   /// clashmi: make sure the core listening ports are not blocked by the
@@ -629,17 +787,19 @@ class VPNService {
       return null;
     }
     if (Platform.isWindows) {
-      await _firewallAddCorePorts();
-      final enable = await getSystemProxyEnable();
-      ReturnResultError? err = await _windowsStartCore(timeout);
-      if (err != null) {
-        await stop();
-        return err;
-      }
-      if (enable) {
-        await setSystemProxy(true);
-      }
-      return null;
+      return _windowsLifecycle(() async {
+        await _firewallAddCorePorts();
+        final enable = await getSystemProxyEnable();
+        ReturnResultError? err = await _windowsStartCore(timeout);
+        if (err != null) {
+          await _windowsStopCore();
+          return err;
+        }
+        if (enable) {
+          await setSystemProxy(true);
+        }
+        return null;
+      });
     }
     final setting = SettingManager.getConfig();
     if (Platform.isIOS || Platform.isMacOS) {
@@ -677,16 +837,18 @@ class VPNService {
 
   static Future<ReturnResultError?> start(Duration timeout) async {
     if (Platform.isWindows) {
-      await _firewallAddCorePorts();
-      ReturnResultError? err = await _windowsStartCore(timeout);
-      if (err != null) {
-        await stop();
-        return err;
-      }
-      if (SettingManager.getConfig().proxy.autoSetSystemProxy) {
-        await setSystemProxy(true);
-      }
-      return null;
+      return _windowsLifecycle(() async {
+        await _firewallAddCorePorts();
+        ReturnResultError? err = await _windowsStartCore(timeout);
+        if (err != null) {
+          await _windowsStopCore();
+          return err;
+        }
+        if (SettingManager.getConfig().proxy.autoSetSystemProxy) {
+          await setSystemProxy(true);
+        }
+        return null;
+      });
     }
     final setting = SettingManager.getConfig();
     VpnServiceWaitResult result = await FlutterVpnService.start(timeout);
@@ -722,8 +884,7 @@ class VPNService {
     }
     await setSystemProxy(false);
     if (Platform.isWindows) {
-      await _windowsStopCore();
-      return;
+      return _windowsLifecycle(() => _windowsStopCore());
     }
     await FlutterVpnService.stop();
   }

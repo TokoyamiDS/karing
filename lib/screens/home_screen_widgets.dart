@@ -11,6 +11,7 @@ import 'package:karing/app/modules/setting_manager.dart';
 import 'package:karing/app/utils/accessibility_utils.dart';
 import 'package:karing/app/utils/app_lifecycle_state_notify.dart';
 import 'package:karing/app/utils/clash_api.dart';
+import 'package:karing/app/utils/network_utils.dart';
 import 'package:karing/app/utils/path_utils.dart';
 import 'package:karing/app/utils/platform_utils.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
@@ -225,6 +226,7 @@ abstract class TextCard0 extends StatefulWidget {
     this.icon,
     required this.title,
     this.tips = "",
+    this.value = "",
     this.focusNode,
     this.onPressed,
     this.onLongPress,
@@ -232,6 +234,11 @@ abstract class TextCard0 extends StatefulWidget {
   final IconData? icon;
   final String title;
   final String tips;
+
+  /// Optional value shown under the title. Empty keeps the compact 50px card
+  /// exactly as before; a value grows it to the height TextCard1 already uses
+  /// for its value line, so the extra text has room instead of overflowing.
+  final String value;
 
   final FocusNode? focusNode;
   final Function()? onPressed;
@@ -241,8 +248,10 @@ abstract class TextCard0 extends StatefulWidget {
 abstract class TextCard0State<T extends TextCard0> extends State<T> {
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasValue = widget.value.isNotEmpty;
     return SizedBox(
-      height: getWidgetHeight(0),
+      height: getWidgetHeight(hasValue ? 1 : 0),
       child: CommonCard(
         alpha: SettingManager.getConfig().uiScreen.getWidgetAlpha(),
         info: Info(
@@ -255,7 +264,25 @@ abstract class TextCard0State<T extends TextCard0> extends State<T> {
         focusNode: widget.focusNode,
         child: Container(
           padding: baseInfoEdgeInsets.copyWith(top: 0),
-          child: null,
+          child: hasValue
+              ? Column(
+                  mainAxisSize: MainAxisSize.max,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyMedium?.toLight
+                          .adjustSize(1)
+                          .copyWith(
+                            fontFamily: Platform.isWindows ? 'Emoji' : null,
+                          ),
+                    ),
+                  ],
+                )
+              : null,
         ),
       ),
     );
@@ -272,6 +299,7 @@ abstract class TextCard1 extends StatefulWidget {
     this.focusNode,
     this.onPressed,
     this.onLongPress,
+    this.onRefresh,
   });
   final IconData? icon;
   final String title;
@@ -280,6 +308,11 @@ abstract class TextCard1 extends StatefulWidget {
   final FocusNode? focusNode;
   final Function()? onPressed;
   final Function()? onLongPress;
+
+  /// Optional refresh affordance rendered beside the value. Cards that leave it
+  /// null render exactly as before — this is the only thing that changes the
+  /// value row.
+  final Function()? onRefresh;
 }
 
 abstract class TextCard1State<T extends TextCard1> extends State<T> {
@@ -314,16 +347,42 @@ abstract class TextCard1State<T extends TextCard1> extends State<T> {
                     return Row(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        Text(
-                          value,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.toLight
-                              .adjustSize(1)
-                              .copyWith(
-                                fontFamily: Platform.isWindows ? 'Emoji' : null,
-                              ),
+                        // Flexible so a long value ellipsizes rather than
+                        // overflowing the card — which the refresh button
+                        // would otherwise push it into.
+                        Flexible(
+                          child: Text(
+                            value,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium?.toLight
+                                .adjustSize(1)
+                                .copyWith(
+                                  fontFamily: Platform.isWindows
+                                      ? 'Emoji'
+                                      : null,
+                                ),
+                          ),
                         ),
+                        if (widget.onRefresh != null)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 2),
+                            child: Tooltip(
+                              message: t.meta.refresh,
+                              child: InkWell(
+                                onTap: widget.onRefresh,
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(3),
+                                  child: Icon(
+                                    Icons.refresh,
+                                    size: 16,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     );
                   },
@@ -443,8 +502,14 @@ class HomeWidgetCard1Options {
   final Function()? onPressed;
   final Function()? onLongPress;
   final FocusNode? focusNode;
+  final Function()? onRefresh;
 
-  HomeWidgetCard1Options(this.onPressed, this.onLongPress, this.focusNode);
+  HomeWidgetCard1Options(
+    this.onPressed,
+    this.onLongPress,
+    this.focusNode, {
+    this.onRefresh,
+  });
 }
 
 class HomeWidgetCard2Options {
@@ -670,6 +735,7 @@ class OutletIpByCurrentSelectedInfoCard extends TextCard1 {
     super.onPressed,
     super.onLongPress,
     super.focusNode,
+    super.onRefresh,
   }) : super(icon: Icons.location_pin, title: t.meta.outletIpByCurrentSelected);
 
   @override
@@ -1146,7 +1212,7 @@ class ServerlessCard extends FutureSwitchCard {
     super.focusNode,
   }) : super(
          icon: Icons.bolt_outlined,
-         title: "Serverless",
+         title: t.HomeScreen.serverless,
          text: t.meta.enable,
          getEnable: ServerlessCard.getEnabled,
          onPressed: null,
@@ -1218,9 +1284,11 @@ class CloudflareCard extends FutureSwitchCard {
               if (ips.isEmpty) {
                 return;
               }
-              ServerManager.replaceCloudflareServerIps(ips.take(8).toList());
+              await ServerManager.replaceCloudflareServerIps(
+                ips.take(8).toList(),
+              );
             } else {
-              ServerManager.restoreCloudflareServerIps();
+              await ServerManager.restoreCloudflareServerIps();
             }
             onValueChanged?.call(value);
           },
@@ -1782,7 +1850,23 @@ class NetShareCard extends TextCard0 {
     : super(
         icon: Icons.cast_connected_outlined,
         title: t.SettingsScreen.networkShare,
+        value: portsSummary(),
       );
+
+  /// The ports another device dials to reach this machine. They are the whole
+  /// point of sharing — you need the number on the *other* device — and are
+  /// otherwise buried two screens deep in settings.
+  ///
+  /// Derived from settings at build time rather than cached, so an edit shows
+  /// up as soon as the home screen rebuilds; `onTapNetShare` calls setState
+  /// once the settings screen closes.
+  static String portsSummary() {
+    final proxy = SettingManager.getConfig().proxy;
+    return [
+      "${t.SettingsScreen.portSettingRule} ${proxy.mixedRuleNetSharePort}",
+      "${t.SettingsScreen.portSettingProxyAll} ${proxy.mixedForwardNetSharePort}",
+    ].join(" · ");
+  }
 
   @override
   State<NetShareCard> createState() => _NetShareCardState();
@@ -1922,6 +2006,11 @@ class _ServerSelectCardState extends State<ServerSelectCard> {
       delay = "";
       tag = "";
       groupid = "";
+    }
+    // With nothing imported the tag is empty, which rendered a blank row with
+    // no explanation of what to do next.
+    if (text.isEmpty) {
+      text = tcontext.ServerSelectScreen.noServerSelected;
     }
     if (_testingTag.isNotEmpty && _testingTag != tag) {
       _testingTag = "";
@@ -2065,6 +2154,26 @@ class _ServerSelectCardState extends State<ServerSelectCard> {
                     ),
                   ],
                 ),
+                // Where this node exits, beside the ping so a node can be
+                // picked on location and latency together. Empty until the node
+                // has been tested successfully at least once.
+                if (cfProxy != null && cfProxy.outletip.isNotEmpty) ...[
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      NetworkUtils.outletLabel(
+                        cfProxy.outletregion,
+                        cfProxy.outletip,
+                        cfProxy.outletIpCost,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: ThemeConfig.kFontSizeListSubItem,
+                      ),
+                    ),
+                  ),
+                ],
                 const Spacer(),
                 SizedBox(
                   width: arrowWidth,
@@ -2514,6 +2623,7 @@ class HomeWidgets {
           onPressed: options.outletIpByCurrentSelectedInfo!.onPressed,
           onLongPress: options.outletIpByCurrentSelectedInfo!.onLongPress,
           focusNode: options.outletIpByCurrentSelectedInfo!.focusNode,
+          onRefresh: options.outletIpByCurrentSelectedInfo!.onRefresh,
         ),
       );
     }

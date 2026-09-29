@@ -1,0 +1,20 @@
+﻿
+  MB ProcessName           Id
+  -- -----------           --
+1431 chrome             34800
+ 895 Memory Compression  4556
+ 869 opencode           30580
+ 567 Devin              17608
+ 548 vmmemWSL            5876
+ 467 chrome             22780
+ 467 WorkBuddyAI        34124
+ 434 node               29532
+ 380 ekrn                3604
+ 364 Everything         23780
+ 361 chrome             24940
+ 351 WorkBuddyAI        31940
+ 328 chrome              7380
+ 305 Telegram           27504
+ 301 chrome             14844
+
+

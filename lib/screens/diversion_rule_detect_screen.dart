@@ -161,10 +161,10 @@ class _DiversionRuleDetectScreenState
                       TextFieldEx(
                         controller: _textControllerHost,
                         textInputAction: TextInputAction.done,
-                        decoration: const InputDecoration(
-                          labelText: "Domain",
-                          hintText: "Domain",
-                          prefixIcon: Icon(Icons.edit_note_outlined),
+                        decoration: InputDecoration(
+                          labelText: tcontext.meta.domain,
+                          hintText: tcontext.meta.domain,
+                          prefixIcon: const Icon(Icons.edit_note_outlined),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -233,7 +233,7 @@ class _DiversionRuleDetectScreenState
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("Rule Set:"),
+                          Text(tcontext.DiversionRuleDetectScreen.ruleSet),
                           ValueListenableBuilder<String>(
                             builder: _buildWithValue,
                             valueListenable: _ruleset,

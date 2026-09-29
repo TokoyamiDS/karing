@@ -9,6 +9,7 @@ import 'package:karing/app/modules/setting_manager.dart';
 import 'package:karing/app/utils/http_utils.dart';
 import 'package:tuple/tuple.dart';
 import 'package:karing/app/utils/singbox_json_utils.dart';
+import 'package:karing/app/utils/singbox_outbound.dart';
 
 class AutoConfUtils {
   /// Detects the subscription/link type from content or url.
@@ -88,11 +89,13 @@ class AutoConfUtils {
                 !urlOrPath.startsWith('https://'))) {
           final file = File(urlOrPath);
           if (await file.exists()) {
+            group.urlOrPath = urlOrPath;
             content = await file.readAsString();
           } else {
             content = urlOrPath;
           }
         } else {
+          group.urlOrPath = urlOrPath;
           // official behavior: subscription downloads ride the proxy
           // (raw.githubusercontent.com etc. are blocked direct from Iran);
           // fall back to direct when the proxy is down or fails.
@@ -260,8 +263,9 @@ class AutoConfUtils {
             'server_port': port,
             'uuid': userInfo,
           };
-          if ((params['flow'] ?? '').isNotEmpty) {
-            out['flow'] = params['flow'];
+          final flow = normalizeVlessFlow(params['flow']);
+          if (flow.isNotEmpty) {
+            out['flow'] = flow;
           }
           if (tls.isNotEmpty) {
             out['tls'] = tls;
@@ -446,8 +450,12 @@ class AutoConfUtils {
         'short_id': params['sid'] ?? "",
       };
     }
-    if ((params['ech'] ?? '').isNotEmpty) {
-      tls['ech'] = {'enabled': true, 'config': params['ech']};
+    // sing-box requires ech.config to be a PEM ECHConfigList. Publishers sometimes put a
+    // DNS URL in ech= (e.g. "ip.gs+udp://8.8.8.8"), and the core then refuses to start at
+    // all: "FATAL initialize outbound[N]: invalid ECH configs pem". Only accept PEM.
+    final echParam = params['ech'] ?? '';
+    if (echParam.contains('-----BEGIN')) {
+      tls['ech'] = {'enabled': true, 'config': echParam};
     }
     // PattN/karing share links: fm= carries a finalmask JSON (per-node TLS
     // fragmentation tuning) — lengths/delays override global settings.
@@ -494,12 +502,21 @@ class AutoConfUtils {
     if (type == 'tcp' && params['headerType'] == 'http') {
       type = 'http';
     }
+    // When a share link omits `host`, the Host header defaults to the SNI. That
+    // is what v2rayN/Xray do, and on a Cloudflare-fronted node it is not
+    // cosmetic: Cloudflare routes by Host, so without it the WebSocket upgrade is
+    // answered 403 and the node never connects — while the same link works fine
+    // in v2rayN. Reproduced against a real link: Host = SNI gave 503 (the origin
+    // was down, i.e. past Cloudflare), Host = the dialled IP gave 403.
+    final host = (params['host'] ?? '').isNotEmpty
+        ? params['host']!
+        : (params['sni'] ?? params['peer'] ?? '');
     if (type == 'ws') {
       final tr = <String, dynamic>{'type': 'ws'};
       var path = params['path'] ?? '';
       if (path.isNotEmpty) tr['path'] = path;
-      if ((params['host'] ?? '').isNotEmpty) {
-        tr['headers'] = {'Host': params['host']};
+      if (host.isNotEmpty) {
+        tr['headers'] = {'Host': host};
       }
       if ((params['eh'] ?? '').isNotEmpty) {
         tr['early_data_header_name'] = params['eh']!;
@@ -528,8 +545,8 @@ class AutoConfUtils {
     } else if (type == 'h2' || type == 'http') {
       final tr = <String, dynamic>{'type': 'http'};
       if ((params['path'] ?? '').isNotEmpty) tr['path'] = params['path'];
-      if ((params['host'] ?? '').isNotEmpty) {
-        tr['host'] = params['host']!
+      if (host.isNotEmpty) {
+        tr['host'] = host
             .split(',')
             .map((e) => e.trim())
             .where((e) => e.isNotEmpty)
@@ -539,7 +556,7 @@ class AutoConfUtils {
     } else if (type == 'httpupgrade') {
       final tr = <String, dynamic>{'type': 'httpupgrade'};
       if ((params['path'] ?? '').isNotEmpty) tr['path'] = params['path'];
-      if ((params['host'] ?? '').isNotEmpty) tr['host'] = params['host']!;
+      if (host.isNotEmpty) tr['host'] = host;
       return tr;
     }
     return {};

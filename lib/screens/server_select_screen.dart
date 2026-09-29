@@ -1,7 +1,6 @@
 // ignore_for_file: use_build_context_synchronously, empty_catches, unused_catch_stack, unused_catch_stack, duplicate_ignore
 
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 
 import 'package:contextmenu/contextmenu.dart';
@@ -107,6 +106,10 @@ class ServerSelectScreen extends LasyRenderingStatefulWidget {
 
 class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
   static final Set<String> _expandGroup = {};
+
+  /// Tags of nodes whose detail card is expanded. Keyed by `groupid|tag` so
+  /// the same tag in two profiles does not expand together.
+  static final Set<String> _expandServer = {};
   final _searchController = TextEditingController();
   String _searchText = "";
 
@@ -144,6 +147,10 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
       }
       if (start || finish) {
         _buildData();
+        // Repaint now. `_rePaint` only asks the one-second timer to do it, which
+        // is a visible lag when a sweep is streaming results in and the list is
+        // meant to re-order as they land.
+        setState(() {});
       }
 
       _rePaint = true;
@@ -185,7 +192,10 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
     });
 
     _timer ??= Timer.periodic(const Duration(seconds: 1), (timer) async {
-      if (_rePaint) {
+      // Also keep repainting while a profile refresh is in flight, so the
+      // header's progress count actually advances. Nothing else fires an event
+      // when a subscription reload starts or finishes.
+      if (_rePaint || _reloadingCount() > 0) {
         _rePaint = false;
         setState(() {});
       }
@@ -234,23 +244,35 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
     if (!widget.singleSelect!.showRecommend) {
       return;
     }
-    var servers = SplayTreeMap();
+    final ui = SettingManager.getConfig().uiScreen;
+    final byCost =
+        ui.recommendSortBy == SettingConfigItemUIScreen.kRecommendSortByCost;
+    // Ranked (metric, node) pairs, best first. A list rather than a map keyed by
+    // the metric: equal values are common, and a map silently kept only the last
+    // node per value — which is why the strip could come up short of its count.
+    final ranked = <Tuple2<int, ProxyConfig>>[];
     for (var item in ServerManager.getConfig().items) {
       if (!item.enable) {
         continue;
       }
       for (var server in item.servers) {
-        int? value = int.tryParse(server.latency);
-        if (value != null) {
-          servers[value] = server;
+        // The cost is 0 until measured, so it cannot rank a node — treat it as
+        // absent rather than as the fastest possible.
+        final metric = byCost
+            ? (server.outletIpCost > 0 ? server.outletIpCost : null)
+            : int.tryParse(server.latency);
+        if (metric != null) {
+          ranked.add(Tuple2(metric, server));
         }
       }
     }
+    ranked.sort((a, b) => a.item1.compareTo(b.item1));
     var use = ServerManager.getUse();
-    for (var value in servers.values) {
-      if (_recommend.length >= 3) {
+    for (var entry in ranked) {
+      if (_recommend.length >= ui.recommendServerCount) {
         break;
       }
+      final value = entry.item2;
       String disableKey = ServerUse.getDisableKey(value);
       bool disabled = use.disable.contains(disableKey);
       if (disabled) {
@@ -1149,12 +1171,7 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
       isWaitTesting = item.testLatency.contains(server.tag);
     }
 
-    Size windowSize = MediaQuery.of(context).size;
-    const double padding = 10;
-    const double leftWidth = 30.0;
-    const double rightWidth = 135.0;
     String tag = server.tag;
-
     if (server.groupid == ServerManager.getUrltestGroupId()) {
       tag = server.tag == kOutboundTagUrltest
           ? tcontext.outboundRuleMode.urltest
@@ -1172,19 +1189,15 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
       }
     }
 
-    double centerWidth =
-        windowSize.width - leftWidth - rightWidth - padding * 2;
-    double tagWidth = centerWidth;
-    if (count != null) {
-      tagWidth = tagWidth - 60;
-    }
-    if (server.attach.isNotEmpty) {
-      tagWidth = tagWidth - 30;
-    }
-    bool isCfNode = ServerManager.isServerCloudflare(server);
-    if (isCfNode) {
-      tagWidth = tagWidth - 26;
-    }
+    final bool isPseudo = server.type != kOutboundTypeServer;
+    bool isCfNode = !isPseudo && ServerManager.isServerCloudflare(server);
+    bool replaced = server.raw['server_ip_replaced'] == true;
+    String protocol = server.getProtocolLabel();
+    String host = server.displayServer;
+    int port = server.serverport;
+    final String expandKey = "${server.groupid}|${server.tag}";
+    final bool expanded = _expandServer.contains(expandKey);
+
     bool noFavGroup =
         server.groupid == ServerManager.getUrltestGroupId() ||
         server.groupid == ServerManager.getDirectGroupId() ||
@@ -1197,273 +1210,468 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
           singleSelectCurrent && widget.singleSelect!.selectedServerInvalid;
     }
 
-    return Material(
-      borderRadius: ThemeDefine.kBorderRadius,
-      child: ContextMenuArea(
-        builder: (context) =>
-            getLongPressServerWidgets(server, isTesting, isWaitTesting, true),
-        child: InkWell(
-          onTap: widget.singleSelect == null
-              ? null
-              : () async {
-                  if (server.type != kOutboundTypeUrltest) {
-                    if (disabled) {
-                      await DialogUtils.showAlertDialog(
-                        context,
-                        tcontext.ServerSelectScreen.selectDisabled,
-                      );
-                      return;
-                    }
-                    if (server.server == "127.0.0.1" ||
-                        server.server == "localhost") {
-                      await DialogUtils.showAlertDialog(
-                        context,
-                        tcontext.ServerSelectScreen.selectLocal(
-                          p: server.server,
-                        ),
-                      );
-                    }
-                    var settingConfig = SettingManager.getConfig();
-                    if (settingConfig.ipStrategy.index <
-                        IPStrategy.preferIPv4.index) {
-                      if (NetworkUtils.isIpv6(server.server)) {
-                        await DialogUtils.showAlertDialog(
-                          context,
-                          tcontext.ServerSelectScreen.selectRequireEnableIPv6,
-                        );
-                      }
-                    }
-                  }
+    final theme = Theme.of(context);
+    final borderColor = singleSelectCurrent
+        ? ThemeDefine.kColorBlue
+        : (replaced
+              ? Colors.green.withValues(alpha: 0.55)
+              : (isCfNode
+                    ? Colors.orange.withValues(alpha: 0.45)
+                    : theme.dividerColor.withValues(alpha: 0.5)));
 
-                  Navigator.pop(context, server);
-                },
-          onTapDown: (details) {},
-          onLongPress:
-              (widget.singleSelect == null ||
-                  server.type == kOutboundTypeUrltest)
-              ? null
-              : () async {
-                  onLongPressServer(server, isTesting, isWaitTesting);
-                },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: padding),
-            color: singleSelectCurrent
-                ? ThemeDefine.kColorBlue
-                : disabled
-                ? Colors.grey
-                : null,
-            width: double.infinity,
-            height: ThemeConfig.kListItemHeight,
-            child: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Material(
+        borderRadius: ThemeDefine.kBorderRadius,
+        color: singleSelectCurrent
+            ? ThemeDefine.kColorBlue.withValues(alpha: 0.12)
+            : (disabled
+                  ? Colors.grey.withValues(alpha: 0.18)
+                  : theme.colorScheme.surfaceContainerLow),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: ThemeDefine.kBorderRadius,
+            border: Border.all(color: borderColor, width: 1),
+          ),
+          child: ContextMenuArea(
+            builder: (context) =>
+                getLongPressServerWidgets(server, isTesting, isWaitTesting, true),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: widget.singleSelect == null
+                      ? null
+                      : () async {
+                          if (!isPseudo) {
+                            if (disabled) {
+                              await DialogUtils.showAlertDialog(
+                                context,
+                                tcontext.ServerSelectScreen.selectDisabled,
+                              );
+                              return;
+                            }
+                            if (server.server == "127.0.0.1" ||
+                                server.server == "localhost") {
+                              await DialogUtils.showAlertDialog(
+                                context,
+                                tcontext.ServerSelectScreen.selectLocal(
+                                  p: server.server,
+                                ),
+                              );
+                            }
+                            var settingConfig = SettingManager.getConfig();
+                            if (settingConfig.ipStrategy.index <
+                                IPStrategy.preferIPv4.index) {
+                              if (NetworkUtils.isIpv6(server.server)) {
+                                await DialogUtils.showAlertDialog(
+                                  context,
+                                  tcontext.ServerSelectScreen
+                                      .selectRequireEnableIPv6,
+                                );
+                              }
+                            }
+                          }
+                          Navigator.pop(context, server);
+                        },
+                  onLongPress: (widget.singleSelect == null || isPseudo)
+                      ? null
+                      : () async {
+                          onLongPressServer(server, isTesting, isWaitTesting);
+                        },
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          width: leftWidth,
-                          height: ThemeConfig.kListItemHeight,
-                          child: widget.singleSelect != null
-                              ? Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        index.toString(),
-                                        style: TextStyle(fontSize: 12),
-                                      ),
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              child: widget.singleSelect != null
+                                  ? Text(
+                                      index.toString(),
+                                      style: const TextStyle(fontSize: 12),
+                                    )
+                                  : Checkbox(
+                                      tristate: true,
+                                      value: widget.multiSelect!.selectedServers
+                                          .contains(server),
+                                      onChanged: (bool? value) {
+                                        if (value == true) {
+                                          widget.multiSelect!.selectedServers
+                                              .add(server);
+                                        } else {
+                                          widget.multiSelect!.selectedServers
+                                              .remove(server);
+                                        }
+                                        setState(() {});
+                                      },
                                     ),
-                                  ],
-                                )
-                              : Checkbox(
-                                  tristate: true,
-                                  value: widget.multiSelect!.selectedServers
-                                      .contains(server),
-                                  onChanged: (bool? value) {
-                                    if (value == true) {
-                                      widget.multiSelect!.selectedServers.add(
-                                        server,
-                                      );
-                                    } else {
-                                      widget.multiSelect!.selectedServers
-                                          .remove(server);
-                                    }
-                                    setState(() {});
-                                  },
+                            ),
+                            if (!isPseudo) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1,
                                 ),
-                        ),
-                        SizedBox(
-                          width: tagWidth,
-                          child: Text(
-                            tag,
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 3,
-                            style: TextStyle(
-                              fontSize: ThemeConfig.kFontSizeListSubItem,
-                              fontFamily: Platform.isWindows ? 'Emoji' : null,
-                              color: singleSelectCurrentInvalid
-                                  ? Colors.red
-                                  : null,
-                            ),
-                          ),
-                        ),
-                        if (server.attach.isNotEmpty) ...[
-                          SizedBox(
-                            width: 30,
-                            child: Text(
-                              server.attach,
-                              style: const TextStyle(fontSize: 10),
-                            ),
-                          ),
-                        ],
-                        if (isCfNode) ...[
-                          Container(
-                            width: 26,
-                            alignment: Alignment.centerLeft,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: Colors.orange,
-                                  width: 0.6,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.secondaryContainer,
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
-                              ),
-                              child: const Text(
-                                "CF",
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.orange,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (count != null) ...[
-                          SizedBox(
-                            width: 60,
-                            child: Text(
-                              count,
-                              style: const TextStyle(
-                                fontSize: ThemeConfig.kFontSizeListSubItem,
-                              ),
-                            ),
-                          ),
-                        ],
-                        Container(
-                          alignment: Alignment.centerRight,
-                          width: rightWidth,
-                          child: Row(
-                            children: [
-                              const SizedBox(width: 5),
-                              SizedBox(
-                                height: ThemeConfig.kListItemHeight,
-                                child: InkWell(
-                                  onTap: noFavGroup
-                                      ? null
-                                      : () {
-                                          ServerManager.toggleFav(server);
-                                          if (SettingManager.getConfig()
-                                              .autoSelect
-                                              .prioritizeMyFav) {
-                                            ServerManager.setDirty(true);
-                                          }
-                                          _buildData();
-                                          setState(() {});
-                                        },
-                                  child: Row(
-                                    children: [
-                                      if (!(!showFav || noFavGroup)) ...[
-                                        Container(
-                                          decoration: const BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            color: Colors.orange,
-                                          ),
-                                          child: Container(
-                                            width: 20,
-                                            height: 20,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              color: Colors.white.withValues(
-                                                alpha: 0.8,
-                                              ),
-                                            ),
-                                            child: Icon(
-                                              Icons.star_outlined,
-                                              size: 20,
-                                              color: isFav
-                                                  ? Colors.orange
-                                                  : Colors.white,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(width: 2),
-                                      SizedBox(
-                                        width: !showFav || noFavGroup
-                                            ? 45 + 20
-                                            : 45,
-                                        child: Text(
-                                          server.getShowType(),
-                                          style: const TextStyle(
-                                            fontSize: ThemeConfig
-                                                .kFontSizeListSubItem,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                child: Text(
+                                  protocol,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: theme
+                                        .colorScheme.onSecondaryContainer,
                                   ),
                                 ),
                               ),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text(
+                                tag,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                style: TextStyle(
+                                  fontSize: ThemeConfig.kFontSizeListSubItem,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: Platform.isWindows
+                                      ? 'Emoji'
+                                      : null,
+                                  color: singleSelectCurrentInvalid
+                                      ? Colors.red
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (isCfNode) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: Colors.orange,
+                                    width: 0.6,
+                                  ),
+                                ),
+                                child: Text(
+                                  replaced ? "CF✓" : "CF",
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            if (disabled)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4),
+                                child: Icon(
+                                  Icons.block,
+                                  size: 16,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.dns_outlined,
+                              size: 14,
+                              color: theme.textTheme.bodySmall?.color,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                port > 0 ? "$host:$port" : host,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: ThemeConfig.kFontSizeListSubItem,
+                                  fontFamily: Platform.isWindows
+                                      ? 'Emoji'
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (replaced) ...[
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.swap_horiz,
+                                size: 14,
+                                color: Colors.green.withValues(alpha: 0.9),
+                              ),
                               const SizedBox(width: 2),
-                              CommonWidget.createLatencyWidget(
-                                context,
-                                themes,
-                                ThemeConfig.kListItemHeight,
-                                isTesting || isWaitTesting,
-                                isTesting,
-                                server.latency,
-                                onTapLatencyReload: () async {
-                                  if (!await startVPN()) {
-                                    return;
-                                  }
-                                  ServerManager.testOutboundLatencyForServer(
-                                    server.tag,
-                                    server.groupid,
-                                  ).then((err) {
-                                    if (err != null) {
-                                      if (mounted) {
-                                        setState(() {});
-
-                                        DialogUtils.showAlertDialog(
-                                          context,
-                                          err.message,
-                                          showCopy: true,
-                                          showFAQ: true,
-                                          withVersion: true,
-                                        );
-                                      }
-                                    }
-                                  });
-                                },
+                              Text(
+                                server.originalServer,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.green,
+                                ),
                               ),
                             ],
-                          ),
+                            if (count != null) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                count,
+                                style: const TextStyle(fontSize: 11),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+                  child: Row(
+                    children: [
+                      InkWell(
+                        onTap: (!showFav || noFavGroup)
+                            ? null
+                            : () {
+                                ServerManager.toggleFav(server);
+                                if (SettingManager.getConfig()
+                                    .autoSelect
+                                    .prioritizeMyFav) {
+                                  ServerManager.setDirty(true);
+                                }
+                                _buildData();
+                                setState(() {});
+                              },
+                        child: Icon(
+                          Icons.star_outlined,
+                          size: 20,
+                          color: (!showFav || noFavGroup)
+                              ? theme.disabledColor.withValues(alpha: 0.4)
+                              : (isFav ? Colors.orange : theme.disabledColor),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      CommonWidget.createLatencyWidget(
+                        context,
+                        themes,
+                        null,
+                        isTesting || isWaitTesting,
+                        isTesting,
+                        server.latency,
+                        onTapLatencyReload: () async {
+                          if (!await startVPN()) {
+                            return;
+                          }
+                          ServerManager.testOutboundLatencyForServer(
+                            server.tag,
+                            server.groupid,
+                          ).then((err) {
+                            if (err != null) {
+                              if (mounted) {
+                                setState(() {});
+                                DialogUtils.showAlertDialog(
+                                  context,
+                                  err.message,
+                                  showCopy: true,
+                                  showFAQ: true,
+                                  withVersion: true,
+                                );
+                              }
+                            }
+                          });
+                        },
+                      ),
+                      // Where this node exits, beside the ping so a node can be
+                      // picked on location and latency together. The configured
+                      // address is deliberately not used: a Cloudflare-fronted
+                      // node dials an anycast IP that says nothing about the
+                      // exit. Empty until the node has been tested once.
+                      if (server.outletip.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            NetworkUtils.outletLabel(
+                              server.outletregion,
+                              server.outletip,
+                              server.outletIpCost,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: ThemeConfig.kFontSizeListSubItem,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const Spacer(),
+                      if (!isPseudo)
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              if (expanded) {
+                                _expandServer.remove(expandKey);
+                              } else {
+                                _expandServer.add(expandKey);
+                              }
+                            });
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  expanded ? "Less" : "Details",
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                Icon(
+                                  expanded
+                                      ? Icons.keyboard_arrow_up_outlined
+                                      : Icons.keyboard_arrow_down_outlined,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (expanded && !isPseudo)
+                  _buildServerDetails(theme, server, item, item?.remark ?? ""),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Protocol/transport/TLS/replacement details shown when a node card is
+  /// expanded. Secrets (uuid/password/keys) are intentionally not printed.
+  Widget _buildServerDetails(
+    ThemeData theme,
+    ProxyConfig server,
+    ServerConfigGroupItem? group,
+    String groupName,
+  ) {
+    final raw = server.raw;
+    final tls = raw['tls'] is Map
+        ? Map<String, dynamic>.from(raw['tls'] as Map)
+        : <String, dynamic>{};
+    final transport = raw['transport'] is Map
+        ? Map<String, dynamic>.from(raw['transport'] as Map)
+        : <String, dynamic>{};
+    final rows = <Tuple2<String, String>>[];
+    void add(String k, dynamic v) {
+      final s = v?.toString() ?? "";
+      if (s.isNotEmpty) {
+        rows.add(Tuple2(k, s));
+      }
+    }
+
+    add("Protocol", server.getProtocol());
+    if (groupName.isNotEmpty) {
+      add("Profile", groupName);
+    }
+    add("Address", server.displayServer);
+    if (server.serverport > 0) {
+      add("Port", server.serverport);
+    }
+    if (server.raw['server_ip_replaced'] == true) {
+      add("Original", server.originalServer);
+      add("Replacement", "Clean IP active");
+    }
+    if (server.attach.isNotEmpty) {
+      add("Attach", server.attach);
+    }
+    if (server.outletip.isNotEmpty) {
+      add("Outlet IP", server.outletip);
+    }
+    if (tls['enabled'] == true) {
+      add("TLS", "enabled");
+      add("SNI", tls['server_name']);
+      if (tls['insecure'] == true) {
+        add("Cert verify", "disabled (insecure)");
+      }
+      if (tls['utls'] is Map && tls['utls']['fingerprint'] != null) {
+        add("Fingerprint", tls['utls']['fingerprint']);
+      }
+      if (tls['reality'] is Map && tls['reality']['enabled'] == true) {
+        add("Reality", "enabled");
+      }
+      if (tls['fragment'] == true || tls['fragment_sizes'] != null) {
+        add("Fragment", "enabled");
+      }
+    }
+    if (transport['type'] != null) {
+      add("Transport", transport['type']);
+      add("Path", transport['path']);
+      add("Host", transport['host']);
+      if (transport['headers'] is Map) {
+        add("Header Host", (transport['headers'] as Map)['Host']);
+      }
+      if (transport['service_name'] != null) {
+        add("gRPC service", transport['service_name']);
+      }
+    }
+    if (server.latency.isNotEmpty) {
+      add("Last latency", server.latency);
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.35,
+        ),
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final row in rows)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 96,
+                    child: Text(
+                      row.item1,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      row.item2,
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1568,6 +1776,75 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
     );
   }
 
+  /// Remote groups currently being refreshed, so the header button can show
+  /// progress rather than inviting a second tap.
+  int _reloadingCount() {
+    int count = 0;
+    for (var item in ServerManager.getConfig().items) {
+      if (item.isRemote() && ServerManager.isReloading(item.groupid)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  void onTapUpdateAll() {
+    ServerManager.reloadAll();
+    _rePaint = true;
+    setState(() {});
+  }
+
+  /// Refresh every remote profile from this screen's header. The same action the
+  /// profiles screen offers, so a subscription can be updated without leaving
+  /// the server list. Mirrors that button deliberately, including the count.
+  Widget _buildUpdateAllButton(Translations tcontext) {
+    final reloading = _reloadingCount();
+    if (reloading > 0) {
+      return Tooltip(
+        message: "$reloading",
+        child: SizedBox(
+          height: 26,
+          width: 34,
+          child: Stack(
+            children: [
+              const Positioned(
+                left: 4,
+                top: 0,
+                height: 26,
+                width: 26,
+                child: RepaintBoundary(child: CircularProgressIndicator()),
+              ),
+              Positioned(
+                left: 0,
+                top: 6,
+                height: 20,
+                width: 34,
+                child: Text(
+                  reloading.toString(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: reloading > 999 ? 8 : 10),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return Tooltip(
+      message: "${tcontext.meta.update} ${tcontext.meta.profile}",
+      child: InkWell(
+        onTap: () async {
+          onTapUpdateAll();
+        },
+        child: const SizedBox(
+          width: 50,
+          height: 30,
+          child: Icon(Icons.cloud_download_outlined, size: 30),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tcontext = Translations.of(context);
@@ -1616,7 +1893,9 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
                             size: 26,
                           ),
                           SizedBox(
-                            width: windowSize.width - 50 * 3 - 26,
+                            // Four 50px slots — back, latency test, update all,
+                            // settings — plus the expand-all chevron's 26px.
+                            width: windowSize.width - 50 * 4 - 26,
                             child: Text(
                               widget.title != null && widget.title!.isNotEmpty
                                   ? widget.title!
@@ -1671,6 +1950,7 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
                                   ),
                                 ),
                               ),
+                        _buildUpdateAllButton(tcontext),
                         Tooltip(
                           message: tcontext.meta.setting,
                           child: InkWell(
@@ -1744,6 +2024,34 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
               ),
             ),
           );
+          options.add(
+            GroupItemOptions(
+              pushOptions: GroupItemPushOptions(
+                name: tcontext.SettingsScreen.recommendServerCount,
+                text: settingConfig.uiScreen.recommendServerCount.toString(),
+                onPush: () async {
+                  final picked = await DialogUtils.showStringPickerDialog(
+                    context,
+                    tcontext.SettingsScreen.recommendServerCount,
+                    [
+                      for (var i = 1;
+                          i <= SettingConfigItemUIScreen.kRecommendServerCountMax;
+                          i++)
+                        i.toString(),
+                    ],
+                    settingConfig.uiScreen.recommendServerCount.toString(),
+                  );
+                  final value = int.tryParse(picked?.data ?? "");
+                  if (value == null) {
+                    return;
+                  }
+                  settingConfig.uiScreen.recommendServerCount = value;
+                  _loadRecommend();
+                  setState(() {});
+                },
+              ),
+            ),
+          );
         }
         if (widget.singleSelect!.showRecent) {
           options.add(
@@ -1793,6 +2101,41 @@ class _ServerSelectScreenState extends LasyRenderingState<ServerSelectScreen> {
             switchValue: settingConfig.uiScreen.sortServerSelectServer,
             onSwitch: (bool value) async {
               settingConfig.uiScreen.sortServerSelectServer = value;
+              setState(() {});
+            },
+          ),
+        ),
+        // What "best" means in the Recommended strip. Latency and IP-lookup time
+        // are both milliseconds but measure different things, and a node can
+        // win one while losing the other.
+        GroupItemOptions(
+          pushOptions: GroupItemPushOptions(
+            name: tcontext.SettingsScreen.recommendSortBy,
+            text: settingConfig.uiScreen.recommendSortBy ==
+                    SettingConfigItemUIScreen.kRecommendSortByCost
+                ? tcontext.SettingsScreen.sortByCost
+                : tcontext.SettingsScreen.sortByLatency,
+            onPush: () async {
+              final byLatency = tcontext.SettingsScreen.sortByLatency;
+              final byCost = tcontext.SettingsScreen.sortByCost;
+              final picked = await DialogUtils.showStringPickerDialog(
+                context,
+                tcontext.SettingsScreen.recommendSortBy,
+                [byLatency, byCost],
+                settingConfig.uiScreen.recommendSortBy ==
+                        SettingConfigItemUIScreen.kRecommendSortByCost
+                    ? byCost
+                    : byLatency,
+              );
+              final chosen = picked?.data;
+              if (chosen == null) {
+                return;
+              }
+              settingConfig.uiScreen.recommendSortBy =
+                  chosen == byCost
+                      ? SettingConfigItemUIScreen.kRecommendSortByCost
+                      : SettingConfigItemUIScreen.kRecommendSortByLatency;
+              _loadRecommend();
               setState(() {});
             },
           ),

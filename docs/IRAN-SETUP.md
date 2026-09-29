@@ -58,7 +58,86 @@ The Iran region preset ships with:
 
 Enable it in Diversion rules by selecting the Iran preset group.
 
-## 6. Troubleshooting
+## 6. Serverless mode (no server needed)
+
+The switch **Settings → Serverless (Iran)** (also the long-press on the connect
+button, and the Serverless card on the home screen) skips proxies entirely and
+reproduces [patterniha/Serverless-for-Iran](https://github.com/patterniha/Serverless-for-Iran)
+**v50** (`Serverless-fragA.jsonc`) on the sing-box core:
+
+| Upstream | Karing |
+|---|---|
+| `tcp-fragment-tls` direct outbound, `finalmask` splits the ClientHello `6/98/1` at 0 ms | same mask on a `direct` + `finalmask` outbound (`tcp-fragment-tls`), applied to sniffed TLS and TCP/443 |
+| second mask stage (`114/1` after the hello) | not emitted: one mask per direct outbound in the core |
+| inbound `sniffing` with `destOverride: tls,http,quic` | route rule `{"action":"sniff","sniffer":["tls","http","quic"]}` |
+| `udp protocol quic` + `udp port 443` → block | same, so browsers drop to TCP/443 where the mask applies |
+| `ip: 10.10.34.0/24, 2001:4188:2:600::/64` → block | same (DPI honeypots) |
+| `tcp-direct` / `udp-direct` catch-alls | the plain `direct` outbound is route `final` |
+| `tcp-fragment` (1-byte splits) and `udp-noises` (24 × `1200-1230` byte noise) | emitted but unreferenced, exactly as upstream keeps them — point the matching rule at one to try it |
+
+Serverless needs no subscription: connect with nothing selected. Iranian and
+private destinations stay direct through the Iran region preset (§5), and the
+mode is mutually exclusive with SNI spoofing.
+
+## 7. How the connection actually works
+
+Worth reading once, because the clean IP is easy to misread as "the server you
+connect to".
+
+**A profile config is a recipe, not an endpoint.** Nothing ever connects *to* a
+config. The config tells the core how to dial; the core then opens a real TCP
+connection to a real address.
+
+**The scanner does not tunnel anything.** The SNI/Cloudflare scanners are
+measuring instruments: they open a real TCP+TLS connection from your device to a
+candidate IP, check what answers, and close it. No traffic is forwarded and no
+address is assigned. They also deliberately bypass the tunnel — while the VPN is
+running, probes go through the loopback `scan-in` inbound, which the core routes
+straight to its `direct` outbound as the first rule, so results always describe
+the physical path.
+
+**With SNI spoofing on, the connection is:**
+
+```
+your device  ->  clean IP:443 (a CDN edge)  ->  your node behind the CDN
+```
+
+The clean IP is the **entry hop only**. Two different names travel at two
+different layers, which is what gets it past DPI:
+
+| Layer | Carries | Read by |
+|---|---|---|
+| TLS ClientHello | `SNI = chatgpt.com` (a whitelisted name) | the DPI — allowed through |
+| inner HTTP request | `Host = your-real-domain` | the CDN — routes to your node |
+
+The certificate is issued for the front name, not your domain, which is why the
+outbound sets `insecure = true`. This is the same idea as domain fronting, and
+it is why the front name and your node must be served by the **same** CDN: the
+edge has to know both. Cloudflare satisfies this trivially (any CF edge serves
+any CF zone); other CDNs often do not — which is exactly why the scanner now
+confirms the IP is a genuine Cloudflare edge before recommending it.
+
+**Your visible IP is not the clean IP.** It is your node's exit IP. The clean IP
+never appears as your public address.
+
+| Mode | What your device dials | Your visible IP |
+|---|---|---|
+| Plain proxy | your node, directly | the node's exit IP |
+| SNI spoofing | clean IP = CF edge | the node's exit IP |
+| Serverless | nothing — direct to the site | **your own ISP IP** |
+
+Serverless is the one to be careful with: there is no server at all. Traffic
+leaves your device directly with the TLS ClientHello fragmented so the DPI
+cannot read the SNI. It only helps against destinations blocked *by SNI
+inspection* — it does not change your IP and does not help against IP-based
+blocking.
+
+**Applying a scan result writes global settings, not per-node ones.** The winning
+fake SNI and the list of clean IPs are stored once and then re-applied to every
+CDN outbound each time the config is built, rotating through the IP list. So one
+scan affects all CDN nodes at once, and nothing changes until you reconnect.
+
+## 8. Troubleshooting
 
 | Symptom | Fix |
 |---|---|

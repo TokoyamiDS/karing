@@ -4,6 +4,19 @@ import 'package:karing/app/utils/file_utils.dart';
 import 'package:karing/app/utils/path_utils.dart';
 import 'package:logger/logger.dart';
 
+/// Diagnostic logging switch.
+///
+/// While true:
+///   * the app log is written at debug level even in a release build,
+///   * it is kept across runs instead of being wiped on startup,
+///   * the sing-box core is asked for debug output (see
+///     `SingboxConfigBuilder.log`), and
+///   * the per-node TLS tuning is recorded.
+///
+/// Set to false before shipping a public release: debug logs are large and
+/// they record request URLs.
+const bool kDiagnosticLogging = true;
+
 class DevelopmentFilter extends LogFilter {
   @override
   bool shouldLog(LogEvent event) => event.level.index >= level!.index;
@@ -21,7 +34,7 @@ class FileLogOutput extends LogOutput {
   @override
   Future<void> init() async {
     String logFilePath = await PathUtils.logFilePath();
-    if (_inProduction) {
+    if (_inProduction && !kDiagnosticLogging) {
       await FileUtils.deletePath(logFilePath);
     }
 
@@ -76,7 +89,7 @@ class FileLogOutput extends LogOutput {
     try {
       final fileSize = await _file!.length();
       if (fileSize > 100 * 1024) {
-        await _raf!.setPosition(0);
+        await _rotate();
       } else {
         final pos = await _raf!.position();
         if (pos > fileSize) {
@@ -92,6 +105,26 @@ class FileLogOutput extends LogOutput {
     }
     _fileAppending = false;
     Future.delayed(const Duration(seconds: 1), _write);
+  }
+
+  /// Rolls the log over to `<name>.1` once it passes the size cap.
+  ///
+  /// The previous behaviour seeked back to offset 0 and carried on writing,
+  /// which overwrote the oldest lines in place and left the file a jumble of
+  /// new and stale text — a long diagnostic session came out unreadable.
+  /// Rotating keeps one previous generation and never interleaves.
+  Future<void> _rotate() async {
+    try {
+      await _raf?.close();
+      final filePath = _file!.path;
+      final backup = File("$filePath.1");
+      if (await backup.exists()) {
+        await backup.delete();
+      }
+      await _file!.rename(backup.path);
+      _file = File(filePath);
+      _raf = await _file!.open(mode: FileMode.writeOnlyAppend);
+    } catch (err) {}
   }
 }
 
@@ -136,7 +169,7 @@ class Log {
     filter: _filter,
     output: _fileLogOutput,
     level: bool.fromEnvironment("dart.vm.product")
-        ? Level.warning
+        ? (kDiagnosticLogging ? Level.debug : Level.warning)
         : Logger.level,
   );
 

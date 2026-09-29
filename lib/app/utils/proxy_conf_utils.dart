@@ -1,4 +1,5 @@
 import 'package:karing/app/runtime/return_result.dart';
+import 'package:karing/app/utils/singbox_outbound.dart';
 
 import 'package:tuple/tuple.dart';
 
@@ -196,6 +197,10 @@ class ProxyConfig {
   String outsideChainProxy = "";
   String outletip = "";
   String outletregion = "";
+
+  /// How long the exit-IP lookup took, in milliseconds. 0 means "not measured
+  /// yet", which the lists render as a `(*)` marker.
+  int outletIpCost = 0;
   String attach = "";
   dynamic rawConfig;
   String latency = "";
@@ -219,6 +224,8 @@ class ProxyConfig {
         'fullconfig': fullConfig,
         'outsidechainproxy': outsideChainProxy,
         'outletip': outletip,
+        'outletregion': outletregion,
+        'outlet_ip_cost': outletIpCost,
         'latency': latency,
         'enable': enable,
         'index': index,
@@ -239,10 +246,16 @@ class ProxyConfig {
     url = map['url'] ?? "";
     if (map['raw'] is Map) {
       raw = Map<String, dynamic>.from(map['raw']);
+      if (raw['type']?.toString().toLowerCase() == 'vless' &&
+          raw['flow'] is String) {
+        raw['flow'] = normalizeVlessFlow(raw['flow'] as String);
+      }
     }
     fullConfig = map['fullconfig'] ?? "";
     outsideChainProxy = map['outsidechainproxy'] ?? "";
     outletip = map['outletip'] ?? "";
+    outletregion = map['outletregion'] ?? "";
+    outletIpCost = map['outlet_ip_cost'] ?? 0;
     latency = map['latency'] ?? "";
     enable = map['enable'] ?? true;
     index = map['index'] ?? 0;
@@ -720,6 +733,85 @@ extension ProxyConfigKaring on ProxyConfig {
       return type;
     }
     return type;
+  }
+
+  /// True when the config is a real proxied node (not the synthetic
+  /// direct/block/urltest/selector/currentSelected pseudo-outbounds).
+  bool get isProxyNode {
+    return type == kOutboundTypeServer;
+  }
+
+  /// The dial address currently in effect. When a clean-IP replacement has
+  /// been applied this is the replacement IP, otherwise the configured host.
+  String get displayServer {
+    final replaced = raw['server_ip_replaced'] == true;
+    if (replaced) {
+      final dial = raw['server'];
+      if (dial is String && dial.isNotEmpty) {
+        return dial;
+      }
+    }
+    return server;
+  }
+
+  /// The host the node was originally configured with. After a clean-IP
+  /// replacement this still returns the pre-replacement domain so it can be
+  /// shown alongside [displayServer] and used for the transport Host header.
+  String get originalServer {
+    final prev = raw['cf_replaced'];
+    if (prev is String && prev.isNotEmpty) {
+      return prev;
+    }
+    return server;
+  }
+
+  /// The real protocol (vless/vmess/trojan/shadowsocks/hysteria2/tuic/...),
+  /// derived from the sing-box outbound JSON when present, falling back to the
+  /// share-link scheme, then the outbound type. Previously the UI showed the
+  /// internal kind ("server") for every node.
+  String getProtocol() {
+    if (type != kOutboundTypeServer) {
+      return type;
+    }
+    final rawType = raw['type'];
+    if (rawType is String && rawType.isNotEmpty) {
+      return rawType;
+    }
+    final link = clipboardLink.isNotEmpty ? clipboardLink : url;
+    if (link.isNotEmpty) {
+      final scheme = link.split('://').first.toLowerCase();
+      switch (scheme) {
+        case 'hy2':
+          return 'hysteria2';
+        case 'ss':
+          return 'shadowsocks';
+        default:
+          return scheme;
+      }
+    }
+    return type;
+  }
+
+  /// A short, upper-case label for badges (VLESS, VMESS, TROJAN, SS...).
+  String getProtocolLabel() {
+    switch (getProtocol().toLowerCase()) {
+      case 'shadowsocks':
+        return "SS";
+      case 'shadowsocksr':
+        return "SSR";
+      case 'hysteria2':
+        return "HY2";
+      case 'wireguard':
+        return "WG";
+      default:
+        return getProtocol().toUpperCase();
+    }
+  }
+
+  /// True when the node is backed by TLS (for transport/SNI details).
+  bool get hasTls {
+    final t = raw['tls'];
+    return t is Map && t['enabled'] == true;
   }
 }
 

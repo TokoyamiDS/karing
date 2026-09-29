@@ -88,3 +88,11 @@ build_output.txt
 /setting.json
 /windows/sing-box.exe
 /bind/
+
+# --- build / session junk (not source) ---
+.flutter_tool_state
+cache.db
+tags.txt
+.github/context-mode/sessions/
+*.bak-oom
+*.bak-before-endpoint

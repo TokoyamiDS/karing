@@ -271,14 +271,21 @@ class AutoUpdateManager {
       }
       _downloading = true;
       late ReturnResult<HttpHeaders> result;
+      var attempt = 0;
       for (var port in ports) {
+        // Resume across attempts the same way DownloadUtils.download does: the
+        // content cannot change in the seconds between two attempts, and this is
+        // the largest file the app fetches. Any mismatch would be caught by the
+        // sha256 check below regardless.
         result = await DownloadUtils.downloadWithPort(
           uri,
           downloadPath,
           null,
           false,
           port,
+          resume: attempt > 0,
         );
+        attempt++;
         if (result.error == null) {
           break;
         }
