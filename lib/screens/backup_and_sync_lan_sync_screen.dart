@@ -24,7 +24,7 @@ import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
 
 class BackupAndSyncLanSyncScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "BackupAndSyncLanSyncScreen");
   }
 
@@ -140,7 +140,7 @@ class _BackupAndSyncLanSyncScreenState
           : AppSchemeActions.syncDownloadAction());
 
       String url =
-          "karing://$action/?ips=${Uri.encodeComponent(ips.join(","))}&port=$listenPort";
+          "${AppSchemeActions.scheme()}://$action/?ips=${Uri.encodeComponent(ips.join(","))}&port=$listenPort";
       if (widget.syncUpload != true) {
         url += "&filename=${Uri.encodeComponent(path.basename(_zipPath!))}";
       }
@@ -246,13 +246,7 @@ class _BackupAndSyncLanSyncScreenState
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
       return;
     }
   }
@@ -306,19 +300,13 @@ class _BackupAndSyncLanSyncScreenState
     }
     try {
       await result.item2.call(httpRequest);
-    } catch (err) {
+    } catch (err, stacktrace) {
       _sendServerInnerError(httpRequest.response);
       Future.delayed(const Duration(microseconds: 10), () async {
         if (!mounted) {
           return;
         }
-        DialogUtils.showAlertDialog(
-          context,
-          err.toString(),
-          showCopy: true,
-          showFAQ: true,
-          withVersion: true,
-        );
+        DialogUtils.showExceptionDialog(context, err, stacktrace);
       });
     }
   }

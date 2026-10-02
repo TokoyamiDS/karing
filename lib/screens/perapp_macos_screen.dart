@@ -1,13 +1,12 @@
 // ignore_for_file: unused_catch_stack
 
-import 'dart:convert';
-
+import 'package:ant_icons_plus/ant_icons_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:karing/app/modules/setting_manager.dart';
 import 'package:karing/app/utils/app_utils.dart';
+import 'package:karing/app/utils/process_utils_macos.dart';
 import 'package:karing/i18n/strings.g.dart';
-import 'package:ant_icons_plus/ant_icons_plus.dart';
 import 'package:karing/screens/dialog_utils.dart';
 import 'package:karing/screens/group_item_creator.dart';
 import 'package:karing/screens/group_item_options.dart';
@@ -16,10 +15,9 @@ import 'package:karing/screens/theme_define.dart';
 import 'package:karing/screens/widgets/framework.dart';
 import 'package:karing/screens/widgets/sheet.dart';
 import 'package:karing/screens/widgets/text_field.dart';
-import 'package:vpn_service/vpn_service.dart';
 
 class PerAppMacosScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "PerAppMacosScreen");
   }
 
@@ -29,33 +27,14 @@ class PerAppMacosScreen extends LasyRenderingStatefulWidget {
   State<PerAppMacosScreen> createState() => _PerAppMacosScreenState();
 }
 
-class ProcessInfo {
-  String name = "";
-  String identifier = "";
-  String designatedRequirement = "";
-  bool hasIcon = false;
-  Image? icon;
-
-  void fromJson(Map<String, dynamic>? map) {
-    if (map == null) {
-      return;
-    }
-    name = map["name"] ?? "";
-    identifier = map["identifier"] ?? "";
-    designatedRequirement = map["designatedRequirement"] ?? "";
-    hasIcon = map["hasIcon"] ?? false;
-  }
-}
-
 class _PerAppMacosScreenState extends LasyRenderingState<PerAppMacosScreen> {
   bool _loading = true;
-  final List<ProcessInfo> _processInfoList = [];
+  final List<MacosProcessInfo> _processInfoList = [];
   final _searchController = TextEditingController();
-  List<ProcessInfo> _searchedData = [];
+  List<MacosProcessInfo> _searchedData = [];
 
   @override
   void initState() {
-    _loading = true;
     getProcessList();
     super.initState();
   }
@@ -91,35 +70,27 @@ class _PerAppMacosScreenState extends LasyRenderingState<PerAppMacosScreen> {
   Future<void> getProcessList() async {
     _processInfoList.clear();
     _searchedData.clear();
-    String? plist = await FlutterVpnService.getProcessList();
+    _loading = true;
+    setState(() {});
+    List<MacosProcessInfo> value = await ProcessUtilsMacos.getProcessList();
     if (!mounted) {
       return;
     }
     _loading = false;
     setState(() {});
-    if (plist == null || plist.isEmpty) {
-      return;
-    }
-    List<ProcessInfo> value = [];
+
     var perapp = SettingManager.getConfig().perapp;
-    try {
-      var config = jsonDecode(plist);
-      for (var i in config) {
-        ProcessInfo info = ProcessInfo();
-        info.fromJson(i);
-        if (perapp.hideSystemApp) {
-          if (info.identifier.startsWith("com.apple.")) {
-            continue;
-          }
-        }
-        if (info.identifier != AppUtils.getId()) {
-          value.add(info);
+    for (var info in value) {
+      if (perapp.hideSystemApp) {
+        if (info.identifier.startsWith("com.apple.")) {
+          continue;
         }
       }
-    } catch (err, stacktrace) {
-      return;
+      if (info.identifier != AppUtils.getId()) {
+        _processInfoList.add(info);
+      }
     }
-    _processInfoList.addAll(value);
+
     _searchedData = _processInfoList;
     setState(() {});
   }
@@ -128,29 +99,10 @@ class _PerAppMacosScreenState extends LasyRenderingState<PerAppMacosScreen> {
     if (SettingManager.getConfig().perapp.hideAppIcon) {
       return null;
     }
-    for (var app in _processInfoList) {
-      if (app.identifier == identifier) {
-        if (app.icon != null) {
-          return app.icon;
-        }
-        if (!app.hasIcon) {
-          return null;
-        }
-        Uint8List? data = await FlutterVpnService.getProcessIcon(identifier);
-        if (!mounted) {
-          return null;
-        }
-        if (data != null) {
-          app.icon = Image.memory(data, cacheHeight: 96, cacheWidth: 96);
-        }
-
-        return app.icon;
-      }
-    }
-    return null;
+    return ProcessUtilsMacos.getProcessIcon(_processInfoList, identifier);
   }
 
-  int sort(ProcessInfo a, ProcessInfo b) {
+  int sort(MacosProcessInfo a, MacosProcessInfo b) {
     return a.name.compareTo(b.name);
   }
 
@@ -277,7 +229,7 @@ class _PerAppMacosScreenState extends LasyRenderingState<PerAppMacosScreen> {
       child: ListView.separated(
         itemCount: _searchedData.length,
         itemBuilder: (BuildContext context, int index) {
-          ProcessInfo current = _searchedData[index];
+          MacosProcessInfo current = _searchedData[index];
           return createWidget(current, windowSize);
         },
         separatorBuilder: (BuildContext context, int index) {
@@ -287,7 +239,7 @@ class _PerAppMacosScreenState extends LasyRenderingState<PerAppMacosScreen> {
     );
   }
 
-  Widget createWidget(ProcessInfo current, Size windowSize) {
+  Widget createWidget(MacosProcessInfo current, Size windowSize) {
     return Material(
       borderRadius: ThemeDefine.kBorderRadius,
       child: InkWell(
@@ -402,7 +354,6 @@ class _PerAppMacosScreenState extends LasyRenderingState<PerAppMacosScreen> {
           switchValue: SettingManager.getConfig().perapp.hideSystemApp,
           onSwitch: (bool value) async {
             SettingManager.getConfig().perapp.hideSystemApp = value;
-            _loading = true;
             getProcessList();
             setState(() {});
           },
@@ -465,17 +416,11 @@ class _PerAppMacosScreenState extends LasyRenderingState<PerAppMacosScreen> {
         SettingManager.getConfig().perapp.list.add(app);
       }
       setState(() {});
-    } catch (err) {
+    } catch (err, stacktrace) {
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 
@@ -489,17 +434,11 @@ class _PerAppMacosScreenState extends LasyRenderingState<PerAppMacosScreen> {
       if (!mounted) {
         return;
       }
-    } catch (err) {
+    } catch (err, stacktrace) {
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 }

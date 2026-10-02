@@ -140,7 +140,7 @@ void main(List<String> args) async {
   await SettingManager.init();
   await BoardProviderManager.init();
   if (!SettingManager.getConfig().disableAppImproveData) {
-    await SentryUtilsPrivate.init();
+    await SentryUtilsPrivate.init(SettingConfig.kMaxDays.inDays);
   }
   if (PlatformUtils.isPC()) {
     await _ensureSingleInstanceOrExit();
@@ -167,20 +167,18 @@ Future<void> run(List<String> args) async {
       );
       String cache = await PathUtils.cacheDir();
       if (cache.isEmpty) {
-        Log.w('start failed: cacheDir empty');
         startFailedReason = StartFailedReason.invalidProfile;
         break;
       }
       String version = await AppUtils.getPackgetVersion();
-      if (buildVersion != version) {
-        Log.w('start failed: version mismatch build=$buildVersion package=$version');
+      final buildVersionParts = buildVersion.split(".");
+      if (buildVersion != version || buildVersionParts.length != 4) {
         startFailedReason = StartFailedReason.invalidVersion;
         break;
       }
       if (PlatformUtils.isPC()) {
         if (path.basename(exePath).toLowerCase() !=
             PathUtils.getExeName().toLowerCase()) {
-          Log.w('start failed: invalid process $exePath');
           startFailedReason = StartFailedReason.invalidProcess;
           break;
         }
@@ -279,9 +277,9 @@ Future<void> run(List<String> args) async {
   }
   try {
     await FastCachedImageConfig.init(subDir: AppUtils.getName());
-    SettingManager.getConfig().uiScreen.fastCachedImageConfigInited = true;
+    SettingConfigItemUIScreen.fastCachedImageConfigInited = true;
   } catch (err, stacktrace) {
-    SettingManager.getConfig().uiScreen.fastCachedImageConfigInited = false;
+    SettingConfigItemUIScreen.fastCachedImageConfigInited = false;
     Log.w("FastCachedImageConfig.init() exception: ${err.toString()}");
   }
   if (Platform.isAndroid) {
@@ -348,10 +346,6 @@ class MyAppState extends State<MyApp>
   static const kMenuExit = "exit_app";
   bool _launchAtStartup = false;
   bool _windowVisibleForMac = false;
-
-  /// Last grey state actually applied to the tray icon, so the periodic
-  /// reconciliation does not re-set the icon when nothing changed.
-  bool? _trayIconGrey;
   bool _trayGrey = true;
   final Themes _themes = Themes();
   @override
@@ -596,6 +590,9 @@ class MyAppState extends State<MyApp>
 
     Biz.onEventVPNStateChanged = ((bool connected) {
       if (PlatformUtils.isPC()) {
+        if (_trayGrey == !connected) {
+          return;
+        }
         _setTray(!connected, false, false);
       }
     });
@@ -639,23 +636,11 @@ class MyAppState extends State<MyApp>
   }
 
   void _setTray(bool grey, bool destroy, bool quitIfFailed) {
-    // Store the desired state synchronously so a right-click during the 300 ms
-    // delay builds the menu from the newest value, not the previous one.
-    _trayGrey = grey;
     Future.delayed(const Duration(milliseconds: 300), () async {
       if (destroy || Platform.isLinux) {
         await trayManager.destroy();
       }
 
-      // Coalesce: if a newer transition superseded this one, drop it.
-      if (!destroy && _trayGrey != grey) {
-        return;
-      }
-      // Idempotent: the periodic state reconciliation re-asserts the same
-      // state every few seconds; do not re-set the icon then.
-      if (!destroy && _trayIconGrey == grey) {
-        return;
-      }
       try {
         if (Platform.isWindows) {
           await trayManager.setIcon(
@@ -668,7 +653,7 @@ class MyAppState extends State<MyApp>
             isTemplate: false,
           );
         }
-        _trayIconGrey = grey;
+        _trayGrey = grey;
       } catch (err, stacktrace) {
         Log.w("setIcon exception: ${err.toString()}, quit");
         if (quitIfFailed) {

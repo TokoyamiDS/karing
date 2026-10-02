@@ -19,7 +19,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:tuple/tuple.dart';
 
 class FileContentViewerScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "FileContentViewerScreen");
   }
 
@@ -385,17 +385,11 @@ class FileContentViewerScreenState
       await SharePlus.instance.share(
         ShareParams(files: [XFile(filePath)], sharePositionOrigin: rect),
       );
-    } catch (err) {
+    } catch (err, stacktrace) {
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 
@@ -417,17 +411,11 @@ class FileContentViewerScreenState
         if (await file.exists()) {
           await file.writeAsString("", flush: true);
         }
-      } catch (err) {
+      } catch (err, stacktrace) {
         if (!mounted) {
           return;
         }
-        DialogUtils.showAlertDialog(
-          context,
-          err.toString(),
-          showCopy: false,
-          showFAQ: false,
-          withVersion: true,
-        );
+        DialogUtils.showExceptionDialog(context, err, stacktrace);
       }
       setState(() {});
     }

@@ -48,6 +48,7 @@ import 'package:karing/app/utils/path_utils.dart';
 import 'package:karing/app/utils/platform_utils.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
 import 'package:karing/app/utils/singbox_config_builder.dart';
+import 'package:karing/app/utils/stacktrace_utils.dart';
 import 'package:karing/app/utils/system_scheme_utils.dart';
 import 'package:karing/app/utils/url_launcher_utils.dart';
 import 'package:karing/app/utils/vpn_action_handler.dart';
@@ -112,7 +113,7 @@ class WidgetImportExport {
 }
 
 class HomeScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "/");
   }
 
@@ -516,7 +517,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
         await Navigator.push(
             context,
             MaterialPageRoute(
-                settings: VersionUpdateScreen.routSettings(),
+                settings: VersionUpdateScreen.routeSettings(),
                 fullscreenDialog: true,
                 builder: (context) => const VersionUpdateScreen(
                       force: true,
@@ -532,7 +533,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: UserAgreementScreen.routSettings(),
+        settings: UserAgreementScreen.routeSettings(),
         fullscreenDialog: true,
         builder: (context) => const UserAgreementScreen(),
       ),
@@ -542,7 +543,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: LanguageSettingsScreen.routSettings(),
+        settings: LanguageSettingsScreen.routeSettings(),
         fullscreenDialog: true,
         builder: (context) => LanguageSettingsScreen(
           canPop: false,
@@ -560,7 +561,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       await Navigator.push(
         context,
         MaterialPageRoute(
-          settings: TvModeScreen.routSettings(),
+          settings: TvModeScreen.routeSettings(),
           fullscreenDialog: true,
           builder: (context) => TvModeScreen(nextText: tcontext.meta.next),
         ),
@@ -569,7 +570,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       await Navigator.push(
         context,
         MaterialPageRoute(
-          settings: AccessibilityScreen.routSettings(),
+          settings: AccessibilityScreen.routeSettings(),
           fullscreenDialog: true,
           builder: (context) =>
               AccessibilityScreen(nextText: tcontext.meta.next),
@@ -580,7 +581,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: RegionSettingsScreen.routSettings(),
+        settings: RegionSettingsScreen.routeSettings(),
         fullscreenDialog: true,
         builder: (context) => RegionSettingsScreen(
           canPop: false,
@@ -600,7 +601,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: DiversionRulesCustomSetScreen.routSettings(),
+        settings: DiversionRulesCustomSetScreen.routeSettings(),
         fullscreenDialog: true,
         builder: (context) => DiversionRulesCustomSetScreen(
           canPop: false,
@@ -616,7 +617,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: NoviceScreen.routSettings(),
+        settings: NoviceScreen.routeSettings(),
         fullscreenDialog: true,
         builder: (context) => const NoviceScreen(),
       ),
@@ -1588,8 +1589,10 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
         savePath,
       );
     } catch (err, stacktrace) {
-      resultError = ReturnResultError(err.toString());
-      Log.w("setServer exception: $err, $stacktrace");
+      resultError = ReturnResultError(
+        "${err.toString()}\n\n${StackTraceUtils.trim(stacktrace)}",
+      );
+      Log.w("setServer exception: $err\n\n${StackTraceUtils.trim(stacktrace)}");
     }
 
     if (resultError != null) {
@@ -1692,7 +1695,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       if (err != null) {
         AccessibilityUtils.announce(context, err.message);
         if (!disableShowAlertDialog) {
-          CommonDialog.handleStartError(context, err.message);
+          CommonDialog.handleStartError(context, err);
         }
         return err;
       }
@@ -1731,7 +1734,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: SettingsScreen.routSettings(),
+        settings: SettingsScreen.routeSettings(),
         builder: (context) => const SettingsScreen(),
       ),
     );
@@ -1827,7 +1830,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: MyProfilesScreen.routSettings(),
+        settings: MyProfilesScreen.routeSettings(),
         builder: (context) => const MyProfilesScreen(),
       ),
     );
@@ -1862,7 +1865,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       await Navigator.push(
         context,
         MaterialPageRoute(
-          settings: PerAppAndroidScreen.routSettings(),
+          settings: PerAppAndroidScreen.routeSettings(),
           builder: (context) => const PerAppAndroidScreen(),
         ),
       );
@@ -1870,7 +1873,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       await Navigator.push(
           context,
           MaterialPageRoute(
-              settings: PerAppMacosScreen.routSettings(),
+              settings: PerAppMacosScreen.routeSettings(),
               builder: (context) => const PerAppMacosScreen()));
     }*/
     await checkAndReload("onTapPerApp");
@@ -1893,7 +1896,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: DiversionRulesScreen.routSettings(),
+        settings: DiversionRulesScreen.routeSettings(),
         builder: (context) => const DiversionRulesScreen(),
       ),
     );
@@ -1905,7 +1908,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     Navigator.push(
       context,
       MaterialPageRoute(
-        settings: NetCheckScreen.routSettings(),
+        settings: NetCheckScreen.routeSettings(),
         builder: (context) => const NetCheckScreen(),
       ),
     );
@@ -2055,13 +2058,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 
@@ -2106,17 +2103,11 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
             await SharePlus.instance.share(
               ShareParams(files: [XFile(filePath)], sharePositionOrigin: rect),
             );
-          } catch (err) {
+          } catch (err, stacktrace) {
             if (!mounted) {
               return;
             }
-            DialogUtils.showAlertDialog(
-              context,
-              err.toString(),
-              showCopy: true,
-              showFAQ: true,
-              withVersion: true,
-            );
+            DialogUtils.showExceptionDialog(context, err, stacktrace);
           }
         }
       }
@@ -2124,13 +2115,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 
@@ -2188,7 +2173,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       await Navigator.push(
         context,
         MaterialPageRoute(
-          settings: RichtextViewScreen.routSettings(),
+          settings: RichtextViewScreen.routeSettings(),
           builder: (context) => RichtextViewScreen(
             title: t.meta.notice,
             file: "",
@@ -2227,7 +2212,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     ProxyConfig? result = await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: ServerSelectScreen.routSettings(),
+        settings: ServerSelectScreen.routeSettings(),
         builder: (context) => ServerSelectScreen(
           singleSelect: ServerSelectScreenSingleSelectedOption(
             selectedServer: _currentServer,
@@ -2462,7 +2447,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
       setState(() {});
 
       if (!disableShowAlertDialog) {
-        CommonDialog.handleStartError(context, result.item1!.message);
+        CommonDialog.handleStartError(context, result.item1!);
       }
       return result.item1;
     }
@@ -2494,7 +2479,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
         err.message = t.meta.FullDiskAccessPermissionRequired;
       }
       if (!disableShowAlertDialog) {
-        CommonDialog.handleStartError(context, err.message);
+        CommonDialog.handleStartError(context, err);
       }
       AccessibilityUtils.announce(context, err.message);
       return err;
@@ -2547,7 +2532,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: NetConnectionsScreen.routSettings(),
+        settings: NetConnectionsScreen.routeSettings(),
         builder: (context) => NetConnectionsScreen(
           connectionsUrl: connectionsUrl,
           checkStarted: true,
@@ -2993,7 +2978,7 @@ class _HomeScreenState extends LasyRenderingState<HomeScreen>
     if (settingConfig.uiScreen.backgroundImageType ==
             SettingConfigItemUIScreen.backgroundTypeRemote &&
         settingConfig.uiScreen.backgroundImageUrl.isNotEmpty &&
-        settingConfig.uiScreen.fastCachedImageConfigInited) {
+        SettingConfigItemUIScreen.fastCachedImageConfigInited) {
       final backgroundImageUrl = settingConfig.uiScreen.backgroundImageUrl;
       if (_invalidBackgroundImageUrl == backgroundImageUrl) {
         return null;

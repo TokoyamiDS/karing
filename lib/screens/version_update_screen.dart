@@ -20,7 +20,7 @@ import 'package:karing/screens/widgets/framework.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class VersionUpdateScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "VersionUpdateScreen");
   }
 
@@ -217,13 +217,7 @@ class _VersionUpdateScreenState
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
       setState(() {});
     }
     _installing = false;

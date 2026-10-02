@@ -25,7 +25,7 @@ import 'package:karing/app/utils/uri_utils.dart';
 import 'package:provider/provider.dart';
 
 class DnsSettingsScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "DnsSettingsScreen");
   }
 
@@ -445,7 +445,7 @@ class _DnsSettingsScreenState extends LasyRenderingState<DnsSettingsScreen> {
                         height: ThemeConfig.kListItemHeight,
                         child: InkWell(
                           onTap: () async {
-                            onTapDelete(addr);
+                            onTapDelete(addr, servers.contains(addr));
                           },
                           child: const Icon(
                             Icons.remove_circle_outlined,
@@ -600,7 +600,7 @@ class _DnsSettingsScreenState extends LasyRenderingState<DnsSettingsScreen> {
     );
   }
 
-  void onTapDelete(String url) async {
+  void onTapDelete(String url, bool dirty) async {
     var settingConfig = SettingManager.getConfig();
     settingConfig.dns.addOrRemoveResolverDns(url, false);
     settingConfig.dns.addOrRemoveOutboundDns(url, false);
@@ -615,5 +615,8 @@ class _DnsSettingsScreenState extends LasyRenderingState<DnsSettingsScreen> {
     }
     _buildData();
     setState(() {});
+    if (dirty) {
+      SettingManager.setDirty(true);
+    }
   }
 }

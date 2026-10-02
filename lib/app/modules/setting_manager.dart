@@ -8,6 +8,7 @@ import 'package:country/country.dart' as country;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:karing/app/runtime/type_checker.dart';
+import 'package:karing/app/utils/accessibility_utils.dart';
 import 'package:karing/app/utils/app_utils.dart';
 import 'package:karing/app/utils/cloudflare_warp_api.dart';
 import 'package:karing/app/utils/convert_utils.dart';
@@ -127,6 +128,7 @@ class SettingConfigItemUI {
   bool hideVpn =
       false; //ios https://github.com/seniorbruce721/surge/blob/0a53e57f23445a3e6f4f59b10a4c83eae4378e38/%E7%A5%9E%E6%9C%BApro#L52   Wi-Fiçٹ¶و€پن¸‹و­£ه¸¸ç”ںو•ˆï¼Œو•°وچ®è؟‍وژ¥و¨،ه¼ڈن¸‹éœ€ç¦پç”¨IPV6 VIFè®¾ç½®و‰چهڈ¯ç”ںو•ˆ?
   bool disableFontScaler = false;
+  bool accessibility = AccessibilityUtils.getAccessibilityEnabled();
   bool hideAfterLaunch = false;
   String netCheckDomain = "google.com";
   String diversionRuleDetectDomain = "google.com";
@@ -140,6 +142,7 @@ class SettingConfigItemUI {
     'wake_lock': wakeLock,
     'hide_vpn': hideVpn,
     'disable_font_scaler': disableFontScaler,
+    'accessibility': accessibility,
     'hide_after_launch': hideAfterLaunch,
     'net_check_domain': netCheckDomain,
     'diversion_rule_detect_domain': diversionRuleDetectDomain,
@@ -156,6 +159,8 @@ class SettingConfigItemUI {
     wakeLock = map["wake_lock"] ?? false;
     hideVpn = map["hide_vpn"] ?? false;
     disableFontScaler = map["disable_font_scaler"] ?? false;
+    accessibility =
+        map["accessibility"] ?? AccessibilityUtils.getAccessibilityEnabled();
     hideAfterLaunch = map["hide_after_launch"] ?? false;
     netCheckDomain = map["net_check_domain"] ?? "google.com";
     diversionRuleDetectDomain =
@@ -240,7 +245,7 @@ class SettingConfigItemUIScreen {
   static const String backgroundTypeLocal = "local";
   static const String backgroundTypeRemote = "remote";
   static const String backgroundTypeDisable = "";
-
+  static bool fastCachedImageConfigInited = false;
   List<String> widgets = [];
   int widgetsAlpha = 255;
 
@@ -271,7 +276,6 @@ class SettingConfigItemUIScreen {
   String backgroundImageType = backgroundTypeDisable;
   String backgroundImageUrl = "";
   String backgroundImageLocal = "";
-  bool fastCachedImageConfigInited = false;
 
   Map<String, dynamic> toJson() => {
     'widgets': widgets,
@@ -539,7 +543,11 @@ class SettingConfigItemTUN {
   /// warning dialog offers Bypass, which sets this and proceeds.
   bool ignoreForeignTunnel = false;
   String loopbackAddress = "";
+  bool routeExcludeAddressTun = Platform.isWindows;
+  bool routeExcludeAddressMulticast = false;
   List<String> routeExcludeAddress = [];
+  bool macAddressInclude = false; //linux
+  List<String> macAddress = []; //linux
 
   Map<String, dynamic> toJson() {
     Map<String, dynamic> ret = {
@@ -566,7 +574,11 @@ class SettingConfigItemTUN {
       'hijack_dns': hijackDns,
       'ignore_foreign_tunnel': ignoreForeignTunnel,
       'loopback_address': loopbackAddress,
+      'route_exclude_address_tun': routeExcludeAddressTun,
+      'route_exclude_address_multicast': routeExcludeAddressMulticast,
       'route_exclude_address': routeExcludeAddress,
+      'mac_address_include': macAddressInclude,
+      'mac_address': macAddress,
     };
     return ret;
   }
@@ -631,11 +643,58 @@ class SettingConfigItemTUN {
         !NetworkUtils.isIpv6(loopbackAddress)) {
       loopbackAddress = "";
     }
+    routeExcludeAddressTun =
+        map["route_exclude_address_tun"] ?? Platform.isWindows;
+    routeExcludeAddressMulticast =
+        map["route_exclude_address_multicast"] ?? false;
     routeExcludeAddress = ConvertUtils.getListStringFromDynamic(
       map["route_exclude_address"],
       true,
       [],
     )!;
+    macAddressInclude = map["mac_address_include"] ?? false;
+    macAddress = ConvertUtils.getListStringFromDynamic(
+      map["mac_address"],
+      true,
+      [],
+    )!;
+  }
+
+  List<String> getAddress(IPStrategy ipStrategy) {
+    int ipv4Mask = 30;
+    int ipv6Mask = 126;
+    if (ipv4Address.isNotEmpty) {
+      if (NetworkUtils.isIpv4(ipv4Address)) {
+        SingboxInboundTunOptions.ipv4Address = ipv4Address;
+      } else if (NetworkUtils.isIpv4WithMask(ipv4Address)) {
+        SingboxInboundTunOptions.ipv4Address = ipv4Address.split("/")[0];
+        ipv4Mask = int.tryParse(ipv4Address.split("/").last) ?? 30;
+        if (ipv4Mask > 30) {
+          ipv4Mask = 30;
+        }
+        if (ipv4Mask < 24) {
+          ipv4Mask = 24;
+        }
+      }
+    }
+
+    List<String> result = ["${SingboxInboundTunOptions.ipv4Address}/$ipv4Mask"];
+    if (ipStrategy.index >= IPStrategy.preferIPv4.index) {
+      if (NetworkUtils.isIpv6(ipv6Address)) {
+        SingboxInboundTunOptions.ipv6Address = ipv6Address;
+      } else if (NetworkUtils.isIpv6WithMask(ipv6Address)) {
+        SingboxInboundTunOptions.ipv6Address = ipv6Address.split("/")[0];
+        ipv6Mask = int.tryParse(ipv6Address.split("/").last) ?? 126;
+        if (ipv6Mask > 126) {
+          ipv6Mask = 126;
+        }
+        if (ipv6Mask < 64) {
+          ipv6Mask = 64;
+        }
+      }
+      result.add("${SingboxInboundTunOptions.ipv6Address}/$ipv6Mask");
+    }
+    return result;
   }
 
   static SettingConfigItemTUN fromJsonStatic(Map<String, dynamic>? map) {
@@ -658,7 +717,7 @@ class SettingConfigItemTUN {
     if (Platform.isWindows) {
       return "gvisor";
     }
-    return "mixed";
+    return "gvisor";
   }
 
   static bool getAppendHttp() {
@@ -739,8 +798,8 @@ class SettingConfigItemDNS {
     {kDNSIsp: "Yandex DNS", kDNSUrl: "udp://77.88.8.1"},
     {kDNSIsp: "Yandex DNS", kDNSUrl: "udp://77.88.8.8"},
     {kDNSIsp: "Yandex DNS", kDNSUrl: "udp://dns.yandex.net"},
-    {kDNSIsp: "Yandex DNS", kDNSUrl: "udp://2a02:6b8::feed:0ff"},
-    {kDNSIsp: "Yandex DNS", kDNSUrl: "udp://2a02:6b8:0:1::feed:0ff"},
+    {kDNSIsp: "Yandex DNS", kDNSUrl: "udp://[2a02:6b8::feed:0ff]"},
+    {kDNSIsp: "Yandex DNS", kDNSUrl: "udp://[2a02:6b8:0:1::feed:0ff]"},
     {kDNSIsp: "Comodo DNS", kDNSUrl: "udp://8.26.56.26"},
     {kDNSIsp: "Comodo DNS", kDNSUrl: "udp://8.20.247.20"},
     {kDNSIsp: "AdGuard DNS", kDNSUrl: "udp://94.140.14.14"},
@@ -1779,9 +1838,9 @@ enum IPStrategy {
 }
 
 class SettingConfig {
-  static const Duration kMaxDays = Duration(days: 30);
+  static const Duration kMaxDays = Duration(days: 21);
   static int htmlBoardPortDefault = 3072;
-  static const String kCoreVersion = "1.13.0";
+  static const String kCoreVersion = "1.14.0";
   static const List<String> kSpeedTestList = [
     "https://speed.cloudflare.com/",
     "https://speedtest.net/",

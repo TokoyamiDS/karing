@@ -15,7 +15,7 @@ import 'package:karing/screens/widgets/text_field.dart';
 import 'package:tuple/tuple.dart';
 
 class MyProfilesEditScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "MyProfilesEditScreen");
   }
 
@@ -211,6 +211,7 @@ class _MyProfilesEditScreenState
         item.xhwid == _xhwid &&
         item.proxyFilter.method == _proxyFilter.method &&
         item.proxyFilter.keywordOrRegx == _proxyFilter.keywordOrRegx &&
+        item.proxyFilter.matchAttribute == _proxyFilter.matchAttribute &&
         item.keepDiversionRules == _keepDiversionRules &&
         item.reloadAfterProfileUpdate == _reloadAfterProfileUpdate &&
         item.testLatencyAfterProfileUpdate == _testLatencyAfterProfileUpdate &&

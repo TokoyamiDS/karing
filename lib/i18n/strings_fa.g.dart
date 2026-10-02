@@ -16,20 +16,21 @@ class TranslationsFa with BaseTranslations<AppLocale, Translations> implements T
 	/// Constructing via the enum [AppLocale.build] is preferred.
 	TranslationsFa({Map<String, Node>? overrides, PluralResolver? cardinalResolver, PluralResolver? ordinalResolver, TranslationMetadata<AppLocale, Translations>? meta})
 		: assert(overrides == null, 'Set "translation_overrides: true" in order to enable this feature.'),
-		  $meta = meta ?? TranslationMetadata(
+		  _meta = meta ?? TranslationMetadata(
 		    locale: AppLocale.fa,
 		    overrides: overrides ?? {},
 		    cardinalResolver: cardinalResolver,
 		    ordinalResolver: ordinalResolver,
 		  ) {
-		$meta.setFlatMapFunction(_flatMapFunction);
+		_meta.setFlatMapFunction(_flatMapFunction);
 	}
 
 	/// Metadata for the translations of <fa>.
-	@override final TranslationMetadata<AppLocale, Translations> $meta;
+	final TranslationMetadata<AppLocale, Translations> _meta;
+	@override TranslationMetadata<AppLocale, Translations> get $meta => _meta;
 
 	/// Access flat map
-	@override dynamic operator[](String key) => $meta.getTranslation(key);
+	@override dynamic operator[](String key) => _meta.getTranslation(key);
 
 	late final TranslationsFa _root = this; // ignore: unused_field
 
@@ -41,15 +42,12 @@ class TranslationsFa with BaseTranslations<AppLocale, Translations> implements T
 	@override late final _Translations$BackupAndSyncWebdavScreen$fa BackupAndSyncWebdavScreen = _Translations$BackupAndSyncWebdavScreen$fa._(_root);
 	@override late final _Translations$DiversionGroupCustomEditScreen$fa DiversionGroupCustomEditScreen = _Translations$DiversionGroupCustomEditScreen$fa._(_root);
 	@override late final _Translations$DiversionRuleDetectScreen$fa DiversionRuleDetectScreen = _Translations$DiversionRuleDetectScreen$fa._(_root);
-	@override late final _Translations$StatisticsRecordsScreen$fa StatisticsRecordsScreen = _Translations$StatisticsRecordsScreen$fa._(_root);
 	@override late final _Translations$DiversionRulesScreen$fa DiversionRulesScreen = _Translations$DiversionRulesScreen$fa._(_root);
 	@override late final _Translations$DnsSettingsScreen$fa DnsSettingsScreen = _Translations$DnsSettingsScreen$fa._(_root);
 	@override late final _Translations$FileContentViewerScreen$fa FileContentViewerScreen = _Translations$FileContentViewerScreen$fa._(_root);
 	@override late final _Translations$HomeScreen$fa HomeScreen = _Translations$HomeScreen$fa._(_root);
 	@override late final _Translations$LaunchFailedScreen$fa LaunchFailedScreen = _Translations$LaunchFailedScreen$fa._(_root);
 	@override late final _Translations$MyProfilesMergeScreen$fa MyProfilesMergeScreen = _Translations$MyProfilesMergeScreen$fa._(_root);
-	@override late final _Translations$SniScannerScreen$fa SniScannerScreen = _Translations$SniScannerScreen$fa._(_root);
-	@override late final _Translations$CloudflareScannerScreen$fa CloudflareScannerScreen = _Translations$CloudflareScannerScreen$fa._(_root);
 	@override late final _Translations$NetCheckScreen$fa NetCheckScreen = _Translations$NetCheckScreen$fa._(_root);
 	@override late final _Translations$NetConnectionsFilterScreen$fa NetConnectionsFilterScreen = _Translations$NetConnectionsFilterScreen$fa._(_root);
 	@override late final _Translations$NetConnectionsScreen$fa NetConnectionsScreen = _Translations$NetConnectionsScreen$fa._(_root);
@@ -196,23 +194,7 @@ class _Translations$DiversionRuleDetectScreen$fa implements Translations$Diversi
 	// Translations
 	@override String get title => 'کشف قانون انحراف';
 	@override String get rule => 'قانون:';
-	@override String get ruleSet => 'مجموعه قوانین:';
 	@override String get outbound => 'سرور پروکسی:';
-}
-
-// Path: StatisticsRecordsScreen
-class _Translations$StatisticsRecordsScreen$fa implements Translations$StatisticsRecordsScreen$en {
-	_Translations$StatisticsRecordsScreen$fa._(this._root);
-
-	final TranslationsFa _root; // ignore: unused_field
-
-	// Translations
-	@override String get noStatisticsAvailable => 'آماری موجود نیست';
-	@override String get total => 'مجموع';
-	@override String get byDestination => 'بر اساس مقصد';
-	@override String get byApp => 'بر اساس برنامه';
-	@override String get unknownDestination => 'ناشناس';
-	@override String get enableHint => 'آمار خاموش است. برای شروع ثبت، آمار را در تنظیمات روشن کنید.';
 }
 
 // Path: DiversionRulesScreen
@@ -257,11 +239,6 @@ class _Translations$HomeScreen$fa implements Translations$HomeScreen$en {
 	final TranslationsFa _root; // ignore: unused_field
 
 	// Translations
-	@override String get foreignTunnelBypass => 'استفاده از تونل به هر حال';
-	@override String get serverless => 'بدون سرور';
-	@override String get sniSpoofing => 'جعل SNI';
-	@override String corePortReserved({required Object port}) => 'ویندوز پورت محلی ${port} را رزرو کرده است، بنابراین اتصال برقرار نشد. احتمالا برنامه دیگری (Hyper-V، WSL یا Docker) آن را گرفته است. برای آزاد شدن پورت ویندوز را دوباره راه‌اندازی کنید یا در تنظیمات پورت دیگری انتخاب کنید.';
-	@override String foreignTunnel({required Object adapters}) => 'آداپتور تونل یک VPN دیگر فعال است (${adapters}). دو تونل هم‌زمان باعث می‌شود ویندوز آداپتور وای‌فای را ری‌ست کند و همین اتصال را یک تا دو دقیقه قطع می‌کند. کارینگ از طریق پروکسی سیستم اجرا می‌شود؛ برای فعال شدن تونل کارینگ، تونل VPN دیگر را خاموش کنید.';
 	@override String invalidServer({required Object p}) => '[${p}] دیگر معتبر نیست، لطفا دوباره یک سرور انتخاب کنید';
 	@override String disabledServer({required Object p}) => '[${p}] غیرفعال شده است، لطفا دوباره یک سرور انتخاب کنید';
 	@override String get expiredServer => 'هیچ سروری در دسترس نیست: ممکن است پیکربندی قدیمی یا غیرفعال باشد';
@@ -298,80 +275,6 @@ class _Translations$MyProfilesMergeScreen$fa implements Translations$MyProfilesM
 	@override String get profilesMergeTips => 'راهنمایی: انحراف پروفایل مرجع حذف می‌شود';
 }
 
-// Path: SniScannerScreen
-class _Translations$SniScannerScreen$fa implements Translations$SniScannerScreen$en {
-	_Translations$SniScannerScreen$fa._(this._root);
-
-	final TranslationsFa _root; // ignore: unused_field
-
-	// Translations
-	@override String get title => 'اسکنر SNI';
-	@override String get ipsLabel => 'آی‌پی‌های تمیز (با کاما جدا کنید)';
-	@override String get snisLabel => 'نام‌های SNI نامزد (با کاما جدا کنید)';
-	@override String get idle => 'آماده';
-	@override String progress({required Object done, required Object total, required Object working}) => '${done} از ${total} بررسی شد · ${working} سالم';
-	@override String failures({required Object detail}) => 'خطاها: ${detail}';
-	@override String get reasonTimeout => 'پایان مهلت';
-	@override String get reasonReset => 'قطع اتصال';
-	@override String get reasonHandshake => 'رد شدن TLS';
-	@override String get reasonUnreachable => 'دسترس‌ناپذیر';
-	@override String get vpnOn => 'VPN روشن — بررسی‌ها از کانال اسکن مستقیم هسته عبور می‌کنند (مسیر واقعی، بدون تونل)';
-	@override String get vpnOff => 'VPN خاموش — بررسی‌ها مستقیماً انجام می‌شوند (مسیر واقعی)';
-	@override String get cdnOnlyHint => 'جعل SNI فقط گره‌های CDN (WebSocket / gRPC / HTTPUpgrade) را تغییر می‌دهد. سایر گره‌ها بدون تغییر می‌مانند.';
-	@override String get templateMode => 'آزمایش با گره انتخاب‌شده من';
-	@override String get templateModeHint => 'درخواست واقعی گره شما از طریق هر آی‌پی بازپخش می‌شود، بنابراین نتیجه ثابت می‌کند که آی‌پی برای همان گره کار می‌کند — نه فقط اینکه دست‌دادن TLS انجام شده است.';
-	@override String get templateUnavailable => 'گره انتخاب‌شده مبتنی بر CDN نیست (WebSocket / gRPC / HTTPUpgrade)، بنابراین جعل SNI برای آن اعمال نمی‌شود.';
-	@override String get templateNoNode => 'هیچ گره‌ای انتخاب نشده است، بنابراین شکلی برای بازپخش وجود ندارد. ابتدا یک گره انتخاب کنید.';
-	@override String get templateNoTls => 'گره انتخاب‌شده از TLS استفاده نمی‌کند، بنابراین SNI برای جعل کردن وجود ندارد. جعل SNI به یک اتصال TLS نیاز دارد.';
-	@override String get templateReality => 'گره انتخاب‌شده از REALITY استفاده می‌کند. REALITY خودش مسدودسازی مبتنی بر SNI را خنثی می‌کند، بنابراین جعل SNI برای آن اعمال نمی‌شود.';
-	@override String get templateNoTransport => 'گره انتخاب‌شده فقط TLS ساده است و ترابری CDN (WebSocket / gRPC / HTTPUpgrade) ندارد، بنابراین هدر Host برای حفظ کردن وجود ندارد و جعل SNI اعمال نمی‌شود.';
-	@override String get needInput => 'حداقل یک آی‌پی و یک نام SNI وارد کنید.';
-	@override String get noResults => 'هنوز هیچ جفت سالمی پیدا نشده است.';
-	@override String get startHint => 'آی‌پی‌های تمیز و نام‌های SNI را وارد کنید، سپس برای اسکن روی آیکون صاعقه بزنید.';
-	@override String get emptyHint => 'هیچ موردی عبور نکرد. همه نامزدها توسط شبکه رد شدند — خلاصه خطاها را در بالا ببینید.';
-	@override String verified({required Object colo}) => 'لبه کلادفلر · ${colo}';
-	@override String get unverified => 'تأییدنشده (لبه کلادفلر نیست)';
-	@override String applied({required Object sni, required Object count, required Object ms}) => 'اعمال شد: SNI ${sni} با ${count} آی‌پی، بهترین ${ms} میلی‌ثانیه. جعل SNI فعال شد — برای اعمال دوباره وصل شوید.';
-	@override String get startTooltip => 'شروع اسکن';
-	@override String get stopTooltip => 'توقف اسکن';
-	@override String get applyTooltip => 'اعمال بهترین جفت در جعل SNI';
-}
-
-// Path: CloudflareScannerScreen
-class _Translations$CloudflareScannerScreen$fa implements Translations$CloudflareScannerScreen$en {
-	_Translations$CloudflareScannerScreen$fa._(this._root);
-
-	final TranslationsFa _root; // ignore: unused_field
-
-	// Translations
-	@override String get title => 'اسکنر کلادفلر';
-	@override String get probeHostLabel => 'هاست کاوش / SNI برای اعمال (speed.cloudflare.com)';
-	@override String get candidateCountLabel => 'تعداد آی‌پی‌های نامزد برای نمونه‌گیری (پیش‌فرض ۲۵۶)';
-	@override String get invalidInput => 'هاست کاوش نباید خالی باشد و تعداد باید بین ۸ تا ۴۰۹۶ باشد.';
-	@override String get noHealthy => 'هنوز هیچ آی‌پی سالم کلادفلری پیدا نشده است.';
-	@override String get emptyHint => 'هیچ موردی عبور نکرد. همه نامزدها در بررسی کلادفلر رد شدند — یک هاست کاوش دیگر امتحان کنید.';
-	@override String replaceDone({required Object count, required Object topN}) => '${count} گره کلادفلر اکنون از ${topN} آی‌پی تمیز سریع‌تر استفاده می‌کنند و تنظیمات اعمال شد.\n\nبرای بازگردانی آدرس‌های اصلی، کارت کلادفلر را در صفحه اصلی خاموش کنید.';
-	@override String get noCfNodes => 'هنوز هیچ گره کلادفلری در پروفایل‌های شما شناسایی نشده است.';
-	@override String restoreDone({required Object count}) => 'آدرس‌های اصلی برای ${count} گره بازگردانی شد و تنظیمات اعمال شد.';
-	@override String get nothingToRestore => 'چیزی برای بازگردانی وجود ندارد.';
-	@override String get noCfNodesFound => 'هیچ گره برچسب‌کلادفلری در پروفایل‌های شما پیدا نشد.';
-	@override String existingNodes({required Object count}) => 'گره‌های کلادفلر موجود: ${count}';
-	@override String get test => 'آزمایش';
-	@override String get testing => 'در حال آزمایش…';
-	@override String get directCoreOn => 'مستقیم = کاوش TLS روی مسیر واقعی · هسته = تأخیر از طریق گره';
-	@override String get directCoreOff => 'مستقیم = کاوش TLS روی مسیر واقعی · هسته = نیاز به VPN روشن';
-	@override String get cleanIpsActive => 'آی‌پی‌های تمیز فعال';
-	@override String get useCleanIps => 'استفاده از آی‌پی‌های تمیز';
-	@override String get cfNodesDialFastest => 'گره‌های CF از سریع‌ترین آی‌پی‌های اسکن‌شده استفاده می‌کنند. برای لغو ضربه بزنید.';
-	@override String get pointCfNodes => 'همه گره‌های CF را به سریع‌ترین آی‌پی‌های اسکن‌شده هدایت کن.';
-	@override String get active => 'فعال';
-	@override String get replace => 'جایگزینی';
-	@override String healthySaved({required Object count}) => '${count} سالم (ذخیره‌شده)';
-	@override String progress({required Object done, required Object total, required Object count}) => '${done} از ${total} بررسی شد · ${count} سالم';
-	@override String get vpnOn => 'VPN روشن — بررسی‌ها از کانال اسکن مستقیم هسته عبور می‌کنند (مسیر واقعی، بدون تونل)';
-	@override String get vpnOff => 'VPN خاموش — بررسی‌ها مستقیماً انجام می‌شوند (مسیر واقعی)';
-}
-
 // Path: NetCheckScreen
 class _Translations$NetCheckScreen$fa implements Translations$NetCheckScreen$en {
 	_Translations$NetCheckScreen$fa._(this._root);
@@ -391,11 +294,6 @@ class _Translations$NetCheckScreen$fa implements Translations$NetCheckScreen$en 
 	@override String get connectivityTestFailed => 'شبکه هنوز به اینترنت متصل نشده';
 	@override String get remoteRulesetsDownloadOk => 'همه با موفقیت دانلود شدند';
 	@override String get remoteRulesetsDownloadNotOk => 'دانلود شد یا ناموفق بود';
-	@override String get vpnNotConnected => 'VPN متصل نیست. برای اجرای بررسی کامل همین حالا آن را روشن کنید؟\n(بررسی‌ها از طریق هسته VPN اجرا می‌شوند و نیاز به روشن بودن آن دارند.)';
-	@override String get localPort => 'پورت محلی';
-	@override String localPortOk({required Object p}) => 'پورت ${p} در دسترس است';
-	@override String localPortInUse({required Object p}) => 'پورت ${p} توسط برنامه در حال استفاده است';
-	@override String localPortReserved({required Object p}) => 'پورت ${p} توسط ویندوز رزرو شده است (Hyper-V / WSL / Docker)، بنابراین هسته نمی‌تواند اجرا شود. برای آزاد شدن پورت ویندوز را دوباره راه‌اندازی کنید یا در تنظیمات پورت دیگری انتخاب کنید.';
 	@override String get outbound => 'سرور پروکسی';
 	@override String outboundOk({required Object p}) => '[${p}] اتصال موفق بود';
 	@override String outboundFailed({required Object p1, required Object p2}) => '[${p1}] اتصال ناموفق \nارور:[${p2}]';
@@ -464,7 +362,6 @@ class _Translations$ServerSelectScreen$fa implements Translations$ServerSelectSc
 
 	// Translations
 	@override String get title => 'انتخاب سرور';
-	@override String get noServerSelected => 'هنوز سروری اضافه نشده — برای افزودن پروفایل ضربه بزنید';
 	@override String get autoSelectServer => 'خودکار سرور با کمترین تاخیر را انتخاب کن';
 	@override String get recentUse => 'اخیرا استفاده‌شده';
 	@override String get myFav => 'علاقه‌مندی‌های من';
@@ -481,12 +378,6 @@ class _Translations$SettingsScreen$fa implements Translations$SettingsScreen$en 
 	final TranslationsFa _root; // ignore: unused_field
 
 	// Translations
-	@override String get recommendServerCount => 'سرورهای پیشنهادی';
-	@override String get recommendSortBy => 'ترتیب پیشنهاد بر اساس';
-	@override String get sortByLatency => 'تأخیر';
-	@override String get sortByCost => 'زمان دریافت IP';
-	@override String get foreignTunnelCheck => 'هشدار درباره تونل‌های VPN دیگر';
-	@override String get foreignTunnelCheckTips => 'وقتی دو تونل برای مسیر پیش‌فرض رقابت کنند، ویندوز آداپتور وای‌فای را ری‌ست می‌کند. این گزینه را فقط وقتی خاموش کنید که این هشدار برای شما نادرست است.';
 	@override String get getTranffic => 'دریافت ترافیک';
 	@override String get tutorial => 'آموزش';
 	@override String get commonlyUsedRulesets => 'قوانین رایج';
@@ -518,12 +409,7 @@ class _Translations$SettingsScreen$fa implements Translations$SettingsScreen$en 
 	@override String get dnsTypeProxy => _root.meta.trafficProxy;
 	@override String get dnsTypeResolver => 'سرور دی‌ان‌اس';
 	@override String get dnsEnableRuleTips => 'بعد از فعال‌سازی نام دامنه، سرور دی‌ان‌اس مربوط را بر اساس قوانین انحراف برای عبور انتخاب می‌کند';
-	@override String get dnsEnableFakeIp => 'فعال‌سازی FakeIP';
 	@override String get dnsEnableFakeIpTips => 'پس از فعال کردن FakeIP، اگر اتصال VPN قطع شود، ممکن است برنامه شما نیاز به راه اندازی مجدد داشته باشد [حالت TUN].';
-	@override String get dnsEnableProxyResolveByProxy => '[${_root.meta.trafficProxy}] حل DNS از طریق سرور پروکسی';
-	@override String get dnsEnableProxyResolveByProxyTips => 'دامنه‌های ترافیک پروکسی از طریق سرور پروکسی متصل حل شوند، نه به‌صورت محلی';
-	@override String get dnsEnableFinalResolveByProxy => '[final] حل DNS از طریق سرور پروکسی';
-	@override String get dnsEnableFinalResolveByProxyTips => 'DNS جایگزین ([final]) از طریق سرور پروکسی متصل حل شود، نه به‌صورت محلی';
 	@override String get dnsTypeOutboundTips => 'سامانه نام دامنه (DNS) برای سرور پروکسی';
 	@override String get dnsTypeDirectTips => 'وضوح نام دامنه برای [${_root.meta.trafficDirect}]';
 	@override String get dnsTypeProxyTips => 'سامانه نام دامنه (DNS) برای ترافیک پروکسی';
@@ -598,6 +484,7 @@ class _Translations$SettingsScreen$fa implements Translations$SettingsScreen$en 
 	@override String get tunRouteExclude => 'استثنای مسیر';
 	@override String get tunRouteExcludeTips => 'ترافیک محدوده‌های آدرس مستثنا دیگر وارد TUN نخواهد شد';
 	@override String get tunRouteExcludeMulticast => 'چندپخشی';
+	@override String get tunRouteExcludeTUN => 'TUN';
 	@override String get loopbackAddress => 'آدرس لوپ‌بک';
 	@override String get enableCluster => 'فعال‌سازی پروکسی Socks/Http خوشه‌ای';
 	@override String get clusterAllowOtherHostsConnect => 'اجازه اتصال دیگران به خوشه';
@@ -906,6 +793,7 @@ class _Translations$meta$fa implements Translations$meta$en {
 	@override String get share => 'اشتراک گذاری';
 	@override String get candidateWord => 'کلمات نامزد';
 	@override String get keywordOrRegx => 'کلمات کلیدی / معمولی';
+	@override String get matchAttribute => 'ویژگی تطبیق';
 	@override String get importFromClipboard => 'افزودن از کلیپ‌برد';
 	@override String get exportToClipboard => 'صادرات به کلیپ بورد';
 	@override String get server => 'سرور';
@@ -942,8 +830,6 @@ class _Translations$meta$fa implements Translations$meta$en {
 	@override String get getProfile => 'پیکربندی را دریافت کنید';
 	@override String get addProfile => 'افزودن پروفایل';
 	@override String get myProfiles => 'پروفایل‌ها';
-	@override String get enableAllProfiles => 'فعال‌سازی همه پروفایل‌ها';
-	@override String get enableAllProfilesTips => 'همه پروفایل‌ها و سرورهای غیرفعال دوباره فعال شوند؟';
 	@override String get profileEdit => 'ویرایش پروفایل';
 	@override String get profileEditUrlExist => 'آدرس URL از‌قبل وجود دارد، لطفا از URL دیگری استفاده کنید';
 	@override String get profileEditReloadAfterProfileUpdate => 'بارگذاری مجدد پس‌از به‌روزرسانی پروفایل';
@@ -1119,14 +1005,7 @@ extension on TranslationsFa {
 			'DiversionGroupCustomEditScreen.setDiversionRule' => 'راهنمایی: پس‌از ذخیره کردن لطفا به [قوانین انحراف] رفته و قوانین مربوط زا تنظیم کنید؛ درغیراین صورت اعمال نخواهند شد',
 			'DiversionRuleDetectScreen.title' => 'کشف قانون انحراف',
 			'DiversionRuleDetectScreen.rule' => 'قانون:',
-			'DiversionRuleDetectScreen.ruleSet' => 'مجموعه قوانین:',
 			'DiversionRuleDetectScreen.outbound' => 'سرور پروکسی:',
-			'StatisticsRecordsScreen.noStatisticsAvailable' => 'آماری موجود نیست',
-			'StatisticsRecordsScreen.total' => 'مجموع',
-			'StatisticsRecordsScreen.byDestination' => 'بر اساس مقصد',
-			'StatisticsRecordsScreen.byApp' => 'بر اساس برنامه',
-			'StatisticsRecordsScreen.unknownDestination' => 'ناشناس',
-			'StatisticsRecordsScreen.enableHint' => 'آمار خاموش است. برای شروع ثبت، آمار را در تنظیمات روشن کنید.',
 			'DiversionRulesScreen.diversionRulesMatchTips' => 'نکته: سعی کنید قوانین را از بالا به پایین مطابقت دهید، از [نهایی] استفاده کنید.',
 			'DnsSettingsScreen.ispCanNotEmpty' => 'ISP نمی‌تواند خالی باشد',
 			'DnsSettingsScreen.urlCanNotEmpty' => 'URL نمی‌تواند خالی باشد',
@@ -1135,11 +1014,6 @@ extension on TranslationsFa {
 			'FileContentViewerScreen.title' => 'نمایش دهنده محتوای فایل',
 			'FileContentViewerScreen.clearFileContent' => 'آیا از پاکسازی محتوای فایل اطمینان دارید؟',
 			'FileContentViewerScreen.clearFileContentTips' => 'آیا از پاکسازی محتوای فایل پروفایل اطمینان دارید؟ پاکسازی محتوای فایل پروفایل ممکن است باعث از دست رفتن داده یا عملیات غیرعادی نرم‌افزار شود؛ لطفا با احتیاط عمل کنید.',
-			'HomeScreen.foreignTunnelBypass' => 'استفاده از تونل به هر حال',
-			'HomeScreen.serverless' => 'بدون سرور',
-			'HomeScreen.sniSpoofing' => 'جعل SNI',
-			'HomeScreen.corePortReserved' => ({required Object port}) => 'ویندوز پورت محلی ${port} را رزرو کرده است، بنابراین اتصال برقرار نشد. احتمالا برنامه دیگری (Hyper-V، WSL یا Docker) آن را گرفته است. برای آزاد شدن پورت ویندوز را دوباره راه‌اندازی کنید یا در تنظیمات پورت دیگری انتخاب کنید.',
-			'HomeScreen.foreignTunnel' => ({required Object adapters}) => 'آداپتور تونل یک VPN دیگر فعال است (${adapters}). دو تونل هم‌زمان باعث می‌شود ویندوز آداپتور وای‌فای را ری‌ست کند و همین اتصال را یک تا دو دقیقه قطع می‌کند. کارینگ از طریق پروکسی سیستم اجرا می‌شود؛ برای فعال شدن تونل کارینگ، تونل VPN دیگر را خاموش کنید.',
 			'HomeScreen.invalidServer' => ({required Object p}) => '[${p}] دیگر معتبر نیست، لطفا دوباره یک سرور انتخاب کنید',
 			'HomeScreen.disabledServer' => ({required Object p}) => '[${p}] غیرفعال شده است، لطفا دوباره یک سرور انتخاب کنید',
 			'HomeScreen.expiredServer' => 'هیچ سروری در دسترس نیست: ممکن است پیکربندی قدیمی یا غیرفعال باشد',
@@ -1156,62 +1030,6 @@ extension on TranslationsFa {
 			'MyProfilesMergeScreen.profilesMergeTarget' => 'پروفایل هدف',
 			'MyProfilesMergeScreen.profilesMergeSource' => 'پروفایل مرجع',
 			'MyProfilesMergeScreen.profilesMergeTips' => 'راهنمایی: انحراف پروفایل مرجع حذف می‌شود',
-			'SniScannerScreen.title' => 'اسکنر SNI',
-			'SniScannerScreen.ipsLabel' => 'آی‌پی‌های تمیز (با کاما جدا کنید)',
-			'SniScannerScreen.snisLabel' => 'نام‌های SNI نامزد (با کاما جدا کنید)',
-			'SniScannerScreen.idle' => 'آماده',
-			'SniScannerScreen.progress' => ({required Object done, required Object total, required Object working}) => '${done} از ${total} بررسی شد · ${working} سالم',
-			'SniScannerScreen.failures' => ({required Object detail}) => 'خطاها: ${detail}',
-			'SniScannerScreen.reasonTimeout' => 'پایان مهلت',
-			'SniScannerScreen.reasonReset' => 'قطع اتصال',
-			'SniScannerScreen.reasonHandshake' => 'رد شدن TLS',
-			'SniScannerScreen.reasonUnreachable' => 'دسترس‌ناپذیر',
-			'SniScannerScreen.vpnOn' => 'VPN روشن — بررسی‌ها از کانال اسکن مستقیم هسته عبور می‌کنند (مسیر واقعی، بدون تونل)',
-			'SniScannerScreen.vpnOff' => 'VPN خاموش — بررسی‌ها مستقیماً انجام می‌شوند (مسیر واقعی)',
-			'SniScannerScreen.cdnOnlyHint' => 'جعل SNI فقط گره‌های CDN (WebSocket / gRPC / HTTPUpgrade) را تغییر می‌دهد. سایر گره‌ها بدون تغییر می‌مانند.',
-			'SniScannerScreen.templateMode' => 'آزمایش با گره انتخاب‌شده من',
-			'SniScannerScreen.templateModeHint' => 'درخواست واقعی گره شما از طریق هر آی‌پی بازپخش می‌شود، بنابراین نتیجه ثابت می‌کند که آی‌پی برای همان گره کار می‌کند — نه فقط اینکه دست‌دادن TLS انجام شده است.',
-			'SniScannerScreen.templateUnavailable' => 'گره انتخاب‌شده مبتنی بر CDN نیست (WebSocket / gRPC / HTTPUpgrade)، بنابراین جعل SNI برای آن اعمال نمی‌شود.',
-			'SniScannerScreen.templateNoNode' => 'هیچ گره‌ای انتخاب نشده است، بنابراین شکلی برای بازپخش وجود ندارد. ابتدا یک گره انتخاب کنید.',
-			'SniScannerScreen.templateNoTls' => 'گره انتخاب‌شده از TLS استفاده نمی‌کند، بنابراین SNI برای جعل کردن وجود ندارد. جعل SNI به یک اتصال TLS نیاز دارد.',
-			'SniScannerScreen.templateReality' => 'گره انتخاب‌شده از REALITY استفاده می‌کند. REALITY خودش مسدودسازی مبتنی بر SNI را خنثی می‌کند، بنابراین جعل SNI برای آن اعمال نمی‌شود.',
-			'SniScannerScreen.templateNoTransport' => 'گره انتخاب‌شده فقط TLS ساده است و ترابری CDN (WebSocket / gRPC / HTTPUpgrade) ندارد، بنابراین هدر Host برای حفظ کردن وجود ندارد و جعل SNI اعمال نمی‌شود.',
-			'SniScannerScreen.needInput' => 'حداقل یک آی‌پی و یک نام SNI وارد کنید.',
-			'SniScannerScreen.noResults' => 'هنوز هیچ جفت سالمی پیدا نشده است.',
-			'SniScannerScreen.startHint' => 'آی‌پی‌های تمیز و نام‌های SNI را وارد کنید، سپس برای اسکن روی آیکون صاعقه بزنید.',
-			'SniScannerScreen.emptyHint' => 'هیچ موردی عبور نکرد. همه نامزدها توسط شبکه رد شدند — خلاصه خطاها را در بالا ببینید.',
-			'SniScannerScreen.verified' => ({required Object colo}) => 'لبه کلادفلر · ${colo}',
-			'SniScannerScreen.unverified' => 'تأییدنشده (لبه کلادفلر نیست)',
-			'SniScannerScreen.applied' => ({required Object sni, required Object count, required Object ms}) => 'اعمال شد: SNI ${sni} با ${count} آی‌پی، بهترین ${ms} میلی‌ثانیه. جعل SNI فعال شد — برای اعمال دوباره وصل شوید.',
-			'SniScannerScreen.startTooltip' => 'شروع اسکن',
-			'SniScannerScreen.stopTooltip' => 'توقف اسکن',
-			'SniScannerScreen.applyTooltip' => 'اعمال بهترین جفت در جعل SNI',
-			'CloudflareScannerScreen.title' => 'اسکنر کلادفلر',
-			'CloudflareScannerScreen.probeHostLabel' => 'هاست کاوش / SNI برای اعمال (speed.cloudflare.com)',
-			'CloudflareScannerScreen.candidateCountLabel' => 'تعداد آی‌پی‌های نامزد برای نمونه‌گیری (پیش‌فرض ۲۵۶)',
-			'CloudflareScannerScreen.invalidInput' => 'هاست کاوش نباید خالی باشد و تعداد باید بین ۸ تا ۴۰۹۶ باشد.',
-			'CloudflareScannerScreen.noHealthy' => 'هنوز هیچ آی‌پی سالم کلادفلری پیدا نشده است.',
-			'CloudflareScannerScreen.emptyHint' => 'هیچ موردی عبور نکرد. همه نامزدها در بررسی کلادفلر رد شدند — یک هاست کاوش دیگر امتحان کنید.',
-			'CloudflareScannerScreen.replaceDone' => ({required Object count, required Object topN}) => '${count} گره کلادفلر اکنون از ${topN} آی‌پی تمیز سریع‌تر استفاده می‌کنند و تنظیمات اعمال شد.\n\nبرای بازگردانی آدرس‌های اصلی، کارت کلادفلر را در صفحه اصلی خاموش کنید.',
-			'CloudflareScannerScreen.noCfNodes' => 'هنوز هیچ گره کلادفلری در پروفایل‌های شما شناسایی نشده است.',
-			'CloudflareScannerScreen.restoreDone' => ({required Object count}) => 'آدرس‌های اصلی برای ${count} گره بازگردانی شد و تنظیمات اعمال شد.',
-			'CloudflareScannerScreen.nothingToRestore' => 'چیزی برای بازگردانی وجود ندارد.',
-			'CloudflareScannerScreen.noCfNodesFound' => 'هیچ گره برچسب‌کلادفلری در پروفایل‌های شما پیدا نشد.',
-			'CloudflareScannerScreen.existingNodes' => ({required Object count}) => 'گره‌های کلادفلر موجود: ${count}',
-			'CloudflareScannerScreen.test' => 'آزمایش',
-			'CloudflareScannerScreen.testing' => 'در حال آزمایش…',
-			'CloudflareScannerScreen.directCoreOn' => 'مستقیم = کاوش TLS روی مسیر واقعی · هسته = تأخیر از طریق گره',
-			'CloudflareScannerScreen.directCoreOff' => 'مستقیم = کاوش TLS روی مسیر واقعی · هسته = نیاز به VPN روشن',
-			'CloudflareScannerScreen.cleanIpsActive' => 'آی‌پی‌های تمیز فعال',
-			'CloudflareScannerScreen.useCleanIps' => 'استفاده از آی‌پی‌های تمیز',
-			'CloudflareScannerScreen.cfNodesDialFastest' => 'گره‌های CF از سریع‌ترین آی‌پی‌های اسکن‌شده استفاده می‌کنند. برای لغو ضربه بزنید.',
-			'CloudflareScannerScreen.pointCfNodes' => 'همه گره‌های CF را به سریع‌ترین آی‌پی‌های اسکن‌شده هدایت کن.',
-			'CloudflareScannerScreen.active' => 'فعال',
-			'CloudflareScannerScreen.replace' => 'جایگزینی',
-			'CloudflareScannerScreen.healthySaved' => ({required Object count}) => '${count} سالم (ذخیره‌شده)',
-			'CloudflareScannerScreen.progress' => ({required Object done, required Object total, required Object count}) => '${done} از ${total} بررسی شد · ${count} سالم',
-			'CloudflareScannerScreen.vpnOn' => 'VPN روشن — بررسی‌ها از کانال اسکن مستقیم هسته عبور می‌کنند (مسیر واقعی، بدون تونل)',
-			'CloudflareScannerScreen.vpnOff' => 'VPN خاموش — بررسی‌ها مستقیماً انجام می‌شوند (مسیر واقعی)',
 			'NetCheckScreen.title' => 'بررسی شبکه',
 			'NetCheckScreen.warn' => 'توجه: به دلیل تأثیر محیط شبکه و قوانین انحراف، نتایج آزمون کاملاً معادل نتایج واقعی نیست.',
 			'NetCheckScreen.invalidDomain' => 'نام دامنه نامعتبر',
@@ -1224,11 +1042,6 @@ extension on TranslationsFa {
 			'NetCheckScreen.connectivityTestFailed' => 'شبکه هنوز به اینترنت متصل نشده',
 			'NetCheckScreen.remoteRulesetsDownloadOk' => 'همه با موفقیت دانلود شدند',
 			'NetCheckScreen.remoteRulesetsDownloadNotOk' => 'دانلود شد یا ناموفق بود',
-			'NetCheckScreen.vpnNotConnected' => 'VPN متصل نیست. برای اجرای بررسی کامل همین حالا آن را روشن کنید؟\n(بررسی‌ها از طریق هسته VPN اجرا می‌شوند و نیاز به روشن بودن آن دارند.)',
-			'NetCheckScreen.localPort' => 'پورت محلی',
-			'NetCheckScreen.localPortOk' => ({required Object p}) => 'پورت ${p} در دسترس است',
-			'NetCheckScreen.localPortInUse' => ({required Object p}) => 'پورت ${p} توسط برنامه در حال استفاده است',
-			'NetCheckScreen.localPortReserved' => ({required Object p}) => 'پورت ${p} توسط ویندوز رزرو شده است (Hyper-V / WSL / Docker)، بنابراین هسته نمی‌تواند اجرا شود. برای آزاد شدن پورت ویندوز را دوباره راه‌اندازی کنید یا در تنظیمات پورت دیگری انتخاب کنید.',
 			'NetCheckScreen.outbound' => 'سرور پروکسی',
 			'NetCheckScreen.outboundOk' => ({required Object p}) => '[${p}] اتصال موفق بود',
 			'NetCheckScreen.outboundFailed' => ({required Object p1, required Object p2}) => '[${p1}] اتصال ناموفق \nارور:[${p2}]',
@@ -1252,7 +1065,6 @@ extension on TranslationsFa {
 			'RegionSettingsScreen.title' => 'کشور یا منطقه',
 			'RegionSettingsScreen.Regions' => 'راهنمایی: لطفا کشور یا منطقه فعلی خود را انتخاب کنید درغیراین‌صورت ممکن‌است باعث مشکلات انحراف شبکه شود',
 			'ServerSelectScreen.title' => 'انتخاب سرور',
-			'ServerSelectScreen.noServerSelected' => 'هنوز سروری اضافه نشده — برای افزودن پروفایل ضربه بزنید',
 			'ServerSelectScreen.autoSelectServer' => 'خودکار سرور با کمترین تاخیر را انتخاب کن',
 			'ServerSelectScreen.recentUse' => 'اخیرا استفاده‌شده',
 			'ServerSelectScreen.myFav' => 'علاقه‌مندی‌های من',
@@ -1260,12 +1072,6 @@ extension on TranslationsFa {
 			'ServerSelectScreen.selectRequireEnableIPv6' => 'سرور انتخاب شده یک آدرس IPv6 است و نیاز به [فعال‌سازی IPv6] دارد',
 			'ServerSelectScreen.selectDisabled' => 'این سرور غیرفعال شده است',
 			'ServerSelectScreen.error404' => 'تشخیص تاخیر با یک اخطار مواجه شده‌است، لطفا بررسی کنید که کانفیگی با محتویات یکسان وجود دارد یا خیر',
-			'SettingsScreen.recommendServerCount' => 'سرورهای پیشنهادی',
-			'SettingsScreen.recommendSortBy' => 'ترتیب پیشنهاد بر اساس',
-			'SettingsScreen.sortByLatency' => 'تأخیر',
-			'SettingsScreen.sortByCost' => 'زمان دریافت IP',
-			'SettingsScreen.foreignTunnelCheck' => 'هشدار درباره تونل‌های VPN دیگر',
-			'SettingsScreen.foreignTunnelCheckTips' => 'وقتی دو تونل برای مسیر پیش‌فرض رقابت کنند، ویندوز آداپتور وای‌فای را ری‌ست می‌کند. این گزینه را فقط وقتی خاموش کنید که این هشدار برای شما نادرست است.',
 			'SettingsScreen.getTranffic' => 'دریافت ترافیک',
 			'SettingsScreen.tutorial' => 'آموزش',
 			'SettingsScreen.commonlyUsedRulesets' => 'قوانین رایج',
@@ -1297,12 +1103,7 @@ extension on TranslationsFa {
 			'SettingsScreen.dnsTypeProxy' => _root.meta.trafficProxy,
 			'SettingsScreen.dnsTypeResolver' => 'سرور دی‌ان‌اس',
 			'SettingsScreen.dnsEnableRuleTips' => 'بعد از فعال‌سازی نام دامنه، سرور دی‌ان‌اس مربوط را بر اساس قوانین انحراف برای عبور انتخاب می‌کند',
-			'SettingsScreen.dnsEnableFakeIp' => 'فعال‌سازی FakeIP',
 			'SettingsScreen.dnsEnableFakeIpTips' => 'پس از فعال کردن FakeIP، اگر اتصال VPN قطع شود، ممکن است برنامه شما نیاز به راه اندازی مجدد داشته باشد [حالت TUN].',
-			'SettingsScreen.dnsEnableProxyResolveByProxy' => '[${_root.meta.trafficProxy}] حل DNS از طریق سرور پروکسی',
-			'SettingsScreen.dnsEnableProxyResolveByProxyTips' => 'دامنه‌های ترافیک پروکسی از طریق سرور پروکسی متصل حل شوند، نه به‌صورت محلی',
-			'SettingsScreen.dnsEnableFinalResolveByProxy' => '[final] حل DNS از طریق سرور پروکسی',
-			'SettingsScreen.dnsEnableFinalResolveByProxyTips' => 'DNS جایگزین ([final]) از طریق سرور پروکسی متصل حل شود، نه به‌صورت محلی',
 			'SettingsScreen.dnsTypeOutboundTips' => 'سامانه نام دامنه (DNS) برای سرور پروکسی',
 			'SettingsScreen.dnsTypeDirectTips' => 'وضوح نام دامنه برای [${_root.meta.trafficDirect}]',
 			'SettingsScreen.dnsTypeProxyTips' => 'سامانه نام دامنه (DNS) برای ترافیک پروکسی',
@@ -1377,6 +1178,7 @@ extension on TranslationsFa {
 			'SettingsScreen.tunRouteExclude' => 'استثنای مسیر',
 			'SettingsScreen.tunRouteExcludeTips' => 'ترافیک محدوده‌های آدرس مستثنا دیگر وارد TUN نخواهد شد',
 			'SettingsScreen.tunRouteExcludeMulticast' => 'چندپخشی',
+			'SettingsScreen.tunRouteExcludeTUN' => 'TUN',
 			'SettingsScreen.loopbackAddress' => 'آدرس لوپ‌بک',
 			'SettingsScreen.enableCluster' => 'فعال‌سازی پروکسی Socks/Http خوشه‌ای',
 			'SettingsScreen.clusterAllowOtherHostsConnect' => 'اجازه اتصال دیگران به خوشه',
@@ -1603,8 +1405,6 @@ extension on TranslationsFa {
 			'meta.noProfileGotAutoBackup' => 'اگر داده‌هایی مانند [${_root.meta.myProfiles}] از بین بروند، می‌توانید آن‌ها را از [${_root.meta.backupAndSync}-${_root.meta.autoBackup}] یا سایر منابع پشتیبان (مانند iCloud یا Webdav و غیره) بازیابی کنید.',
 			'meta.autoBackupAddProfile' => 'بعد از اضافه کردن تنظیمات',
 			'meta.autoBackupRemoveProfile' => 'پس از حذف تنظیمات',
-			_ => null,
-		} ?? switch (path) {
 			'meta.profile' => 'پیکربندی',
 			'meta.currentProfile' => 'پیکربندی فعلی',
 			'meta.importAndExport' => 'وارد‌کردن و خروجی‌گرفتن',
@@ -1634,6 +1434,7 @@ extension on TranslationsFa {
 			'meta.share' => 'اشتراک گذاری',
 			'meta.candidateWord' => 'کلمات نامزد',
 			'meta.keywordOrRegx' => 'کلمات کلیدی / معمولی',
+			'meta.matchAttribute' => 'ویژگی تطبیق',
 			'meta.importFromClipboard' => 'افزودن از کلیپ‌برد',
 			'meta.exportToClipboard' => 'صادرات به کلیپ بورد',
 			'meta.server' => 'سرور',
@@ -1670,8 +1471,6 @@ extension on TranslationsFa {
 			'meta.getProfile' => 'پیکربندی را دریافت کنید',
 			'meta.addProfile' => 'افزودن پروفایل',
 			'meta.myProfiles' => 'پروفایل‌ها',
-			'meta.enableAllProfiles' => 'فعال‌سازی همه پروفایل‌ها',
-			'meta.enableAllProfilesTips' => 'همه پروفایل‌ها و سرورهای غیرفعال دوباره فعال شوند؟',
 			'meta.profileEdit' => 'ویرایش پروفایل',
 			'meta.profileEditUrlExist' => 'آدرس URL از‌قبل وجود دارد، لطفا از URL دیگری استفاده کنید',
 			'meta.profileEditReloadAfterProfileUpdate' => 'بارگذاری مجدد پس‌از به‌روزرسانی پروفایل',
@@ -1690,6 +1489,8 @@ extension on TranslationsFa {
 			'meta.profileAddFailedHandshakeException' => ({required Object p}) => 'اضافه کردن: ${p} ناموفق بود، لطفاً عامل را باز کنید یا گره عامل فعلی را تغییر دهید و دوباره امتحان کنید',
 			'meta.profileAddParseFailed' => 'تجزیه پروفایل انجام نشد',
 			'meta.profileAddNoServerAvaliable' => 'هیچ سروری در دسترس نیست، لطفاً مطمئن شوید که پیوند پیکربندی یا فایل پیکربندی معتبر است، اگر پیکربندی شما از GitHub آمده است، لطفاً آدرس پیوند را از دکمه [Raw] در صفحه دریافت کنید',
+			_ => null,
+		} ?? switch (path) {
 			'meta.profileAddWrapSuccess' => 'پیکربندی با موفقیت ایجاد شد، لطفاً برای مشاهده به [${_root.meta.myProfiles}] بروید',
 			'diversionRulesKeep' => '[${_root.meta.isp}]${_root.meta.diversionRules} را نگه دارید',
 			'diversionCustomGroupPreset' => 'از پیش تنظیم شده [گروه انحراف سفارشی]',

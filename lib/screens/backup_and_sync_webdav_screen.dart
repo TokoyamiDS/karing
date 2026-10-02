@@ -27,7 +27,7 @@ import 'package:tuple/tuple.dart';
 import 'package:webdav_client_plus/webdav_client_plus.dart';
 
 class BackupAndSyncWebdavScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "BackupAndSyncWebdavScreen");
   }
 
@@ -470,13 +470,7 @@ class _BackupAndSyncWebdavScreenState
       }
       _uploading = false;
       setState(() {});
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 
@@ -595,11 +589,11 @@ class _BackupAndSyncWebdavScreenState
     bool? done = await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("webdav"),
+        settings: GroupScreen.routeSettings("webdav"),
         builder: (context) => GroupScreen(
           title: tcontext.meta.webdav,
           getOptions: getOptions,
-          onDone: (BuildContext context) async {
+          onDone: (BuildContext context, SetStateCallback? setstate) async {
             if (!mounted) {
               return false;
             }

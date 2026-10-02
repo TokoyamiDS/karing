@@ -25,7 +25,7 @@ import 'package:karing/app/utils/log.dart';
 import 'package:tuple/tuple.dart';
 
 class AddProfileByLinkOrContentScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "AddProfileByLinkOrContentScreen");
   }
 
@@ -419,7 +419,7 @@ class _AddProfileByLinkOrContentScreenState
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            settings: FileViewScreen.routSettings(),
+                            settings: FileViewScreen.routeSettings(),
                             builder: (context) => FileViewScreen(
                               title: tcontext.meta.profile,
                               content: _remoteContent.text,

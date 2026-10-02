@@ -19,7 +19,7 @@ import 'package:karing/screens/widgets/framework.dart';
 import 'package:path/path.dart' as path;
 
 class BackupAndSyncIcloudScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "BackupAndSyncIcloudScreen");
   }
 
@@ -318,13 +318,7 @@ class _BackupAndSyncIcloudScreenState
       }
       _uploading = false;
       setState(() {});
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 

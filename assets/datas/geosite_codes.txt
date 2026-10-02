@@ -33,6 +33,8 @@ acfun
 acfun@ads
 acplay
 actalis
+activision-blizzard
+activision
 adblock
 adblockplus
 adcolony-ads
@@ -94,6 +96,8 @@ amd
 amd@cn
 amp
 amp@cn
+amplitude
+amplitude@ads
 anaconda
 anandtech
 android
@@ -1243,6 +1247,7 @@ netflix
 netlify
 neuralink
 newegg
+newgrounds
 newrelic-ads
 newscorp
 newsmax
@@ -1270,6 +1275,7 @@ nodejs
 nodeseek
 noip
 nordstrom
+nordvpn
 notion
 now
 nowcoder
@@ -1790,6 +1796,7 @@ visualarts
 viu
 vivo
 vivo@!cn
+vixengroup
 vk
 vk@ads
 vmware

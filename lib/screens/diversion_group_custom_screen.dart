@@ -25,7 +25,7 @@ import 'package:path/path.dart' as path;
 import 'package:share_plus/share_plus.dart';
 
 class DiversionGroupCustomScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "DiversionGroupCustomScreen");
   }
 
@@ -342,7 +342,7 @@ class _DiversionGroupCustomScreenState
         await Navigator.push(
           context,
           MaterialPageRoute(
-            settings: DiversionRulesCustomSetScreen.routSettings(),
+            settings: DiversionRulesCustomSetScreen.routeSettings(),
             builder: (context) => DiversionRulesCustomSetScreen(
               canPop: true,
               title: tcontext.meta.import,
@@ -358,13 +358,7 @@ class _DiversionGroupCustomScreenState
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
     if (!mounted) {
       return;
@@ -411,17 +405,11 @@ class _DiversionGroupCustomScreenState
             await SharePlus.instance.share(
               ShareParams(files: [XFile(filePath)], sharePositionOrigin: rect),
             );
-          } catch (err) {
+          } catch (err, stacktrace) {
             if (!mounted) {
               return;
             }
-            DialogUtils.showAlertDialog(
-              context,
-              err.toString(),
-              showCopy: true,
-              showFAQ: true,
-              withVersion: true,
-            );
+            DialogUtils.showExceptionDialog(context, err, stacktrace);
           }
         }
       }
@@ -429,13 +417,7 @@ class _DiversionGroupCustomScreenState
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 
@@ -502,7 +484,7 @@ class _DiversionGroupCustomScreenState
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: DiversionRulesCustomSetScreen.routSettings(),
+        settings: DiversionRulesCustomSetScreen.routeSettings(),
         builder: (context) => DiversionRulesCustomSetScreen(
           canPop: true,
           title: tcontext.diversionCustomGroupPreset,
@@ -605,7 +587,7 @@ class _DiversionGroupCustomScreenState
     Navigator.push(
       context,
       MaterialPageRoute(
-        settings: DiversionGroupCustomEditScreen.routSettings(),
+        settings: DiversionGroupCustomEditScreen.routeSettings(),
         builder: (context) =>
             DiversionGroupCustomEditScreen(name: current, options: options),
       ),

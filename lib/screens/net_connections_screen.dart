@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:collection/collection.dart';
 import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,9 +15,11 @@ import 'package:karing/app/modules/server_manager.dart';
 import 'package:karing/app/utils/app_lifecycle_state_notify.dart';
 import 'package:karing/app/utils/app_utils.dart';
 import 'package:karing/app/utils/http_utils.dart';
+import 'package:karing/app/utils/icon_utils.dart';
 import 'package:karing/app/utils/package_manager_android.dart';
 import 'package:karing/app/utils/path_utils.dart';
 import 'package:karing/app/utils/platform_utils.dart';
+import 'package:karing/app/utils/process_utils_macos.dart';
 import 'package:karing/app/utils/proxy_conf_utils.dart';
 import 'package:karing/app/utils/singbox_config_builder.dart';
 import 'package:karing/app/utils/websocket.dart';
@@ -310,7 +313,7 @@ class NetConnectionStateOut {
 }
 
 class NetConnectionsScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "NetConnectionsScreen");
   }
 
@@ -333,7 +336,9 @@ class _NetConnectionsScreenState
   final List<NetConnectionStateOut> _connectionOutList = [];
 
   Websocket? _websocket;
-  final Map<String, PackageInfoEx> _applicationInfoList = {};
+  final List<PackageInfoEx> _androidPackageInfoList = [];
+  final List<MacosProcessInfo> _macosProcessInfoList = [];
+  final Map<String, Future<Image?>> _iconFutures = {};
   bool _pause = false;
   ConnectionsSortType _sortType = ConnectionsSortType.none;
   bool _showConnectionIn = true;
@@ -356,11 +361,48 @@ class _NetConnectionsScreenState
 
   Future<void> getInstalledPackages() async {
     if (Platform.isAndroid) {
-      final packages = await PackageManagerAndroid.getInstalledPackages();
-      for (var info in packages) {
-        _applicationInfoList[info.info.packageName!] = info;
+      _iconFutures.clear();
+      _androidPackageInfoList.clear();
+      _androidPackageInfoList.addAll(
+        await PackageManagerAndroid.getInstalledPackages(),
+      );
+      setState(() {});
+    } else if (Platform.isMacOS) {
+      _macosProcessInfoList.clear();
+      _macosProcessInfoList.addAll(await ProcessUtilsMacos.getProcessList());
+    }
+  }
+
+  Future<Image?> getInstalledPackageOrProcessIcon(
+    NetConnectionStateIn connection,
+  ) async {
+    if (Platform.isAndroid) {
+      return _iconFutures.putIfAbsent(
+        connection.package,
+        () => PackageManagerAndroid.getInstalledPackageIcon(
+          _androidPackageInfoList,
+          connection.package,
+        ),
+      );
+    } else if (Platform.isWindows) {
+      if (connection.process.isNotEmpty) {
+        return _iconFutures.putIfAbsent(
+          connection.process,
+          () => IconUtils.getProcessIcon(connection.process),
+        );
+      }
+    } else if (Platform.isMacOS) {
+      if (connection.process.isNotEmpty) {
+        return _iconFutures.putIfAbsent(
+          connection.process,
+          () => ProcessUtilsMacos.getProcessIcon(
+            _macosProcessInfoList,
+            connection.process,
+          ),
+        );
       }
     }
+    return Future.value(null);
   }
 
   String getConnectionInStateKey(ConnectionIn connection) {
@@ -504,10 +546,12 @@ class _NetConnectionsScreenState
 
   void ajustProcess() {
     if (Platform.isAndroid) {
-      if (_applicationInfoList.isNotEmpty) {
+      if (_androidPackageInfoList.isNotEmpty) {
         _states.forEach((key, value) {
           if (value.process.isEmpty && value.package.isNotEmpty) {
-            PackageInfoEx? info = _applicationInfoList[value.package];
+            PackageInfoEx? info = _androidPackageInfoList.firstWhereOrNull(
+              (element) => element.info.packageName == value.package,
+            );
             if (info != null) {
               value.process = info.name;
             }
@@ -809,7 +853,7 @@ class _NetConnectionsScreenState
         padding * 2 * 2 -
         arrow_forward_ios_rounded;
     double height = 100;
-    Image? processIcon;
+
     String processName = current.showProcess;
     if (processName.isNotEmpty) {
       String appName = current.getMacosAppName();
@@ -817,13 +861,6 @@ class _NetConnectionsScreenState
         processName = "$appName[$processName]";
       }
       height += 18;
-      if (Platform.isAndroid) {
-        if (current.package.isNotEmpty) {
-          processIcon = _applicationInfoList[current.package]?.icon;
-        }
-      } else if (Platform.isWindows) {
-      } else if (Platform.isMacOS) {
-      } else if (Platform.isLinux) {}
     }
     if (current.package.isNotEmpty) {
       height += 18;
@@ -911,13 +948,31 @@ class _NetConnectionsScreenState
                         if (processName.isNotEmpty) ...[
                           Row(
                             children: [
-                              if (processIcon != null) ...[
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: processIcon,
+                              FutureBuilder(
+                                future: getInstalledPackageOrProcessIcon(
+                                  current,
                                 ),
-                              ],
+                                builder:
+                                    (
+                                      BuildContext context,
+                                      AsyncSnapshot<Image?> snapshot,
+                                    ) {
+                                      if (!snapshot.hasData ||
+                                          snapshot.data == null) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 12,
+                                            height: 12,
+                                            child: snapshot.data,
+                                          ),
+                                          SizedBox(width: 5),
+                                        ],
+                                      );
+                                    },
+                              ),
                               Text(
                                 processName,
                                 overflow: TextOverflow.ellipsis,
@@ -1269,7 +1324,7 @@ class _NetConnectionsScreenState
     NetConnectionFilter? newFilter = await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: NetConnectionsFilterScreen.routSettings(),
+        settings: NetConnectionsFilterScreen.routeSettings(),
         builder: (context) =>
             NetConnectionsFilterScreen(options: options, filter: _filter),
       ),
@@ -1356,7 +1411,7 @@ class _NetConnectionsScreenState
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: DiversionGroupCustomScreen.routSettings(),
+                    settings: DiversionGroupCustomScreen.routeSettings(),
                     builder: (context) =>
                         DiversionGroupCustomScreen(options: options),
                   ),
@@ -1382,7 +1437,7 @@ class _NetConnectionsScreenState
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: DiversionGroupCustomScreen.routSettings(),
+                    settings: DiversionGroupCustomScreen.routeSettings(),
                     builder: (context) =>
                         DiversionGroupCustomScreen(options: options),
                   ),
@@ -1408,7 +1463,7 @@ class _NetConnectionsScreenState
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: DiversionGroupCustomScreen.routSettings(),
+                    settings: DiversionGroupCustomScreen.routeSettings(),
                     builder: (context) =>
                         DiversionGroupCustomScreen(options: options),
                   ),
@@ -1434,7 +1489,7 @@ class _NetConnectionsScreenState
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: DiversionGroupCustomScreen.routSettings(),
+                    settings: DiversionGroupCustomScreen.routeSettings(),
                     builder: (context) =>
                         DiversionGroupCustomScreen(options: options),
                   ),
@@ -1462,7 +1517,7 @@ class _NetConnectionsScreenState
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: DiversionGroupCustomScreen.routSettings(),
+                    settings: DiversionGroupCustomScreen.routeSettings(),
                     builder: (context) =>
                         DiversionGroupCustomScreen(options: options),
                   ),
@@ -1487,7 +1542,7 @@ class _NetConnectionsScreenState
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: DiversionGroupCustomScreen.routSettings(),
+                    settings: DiversionGroupCustomScreen.routeSettings(),
                     builder: (context) =>
                         DiversionGroupCustomScreen(options: options),
                   ),
@@ -1504,7 +1559,7 @@ class _NetConnectionsScreenState
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("selectType"),
+        settings: GroupScreen.routeSettings("selectType"),
         builder: (context) => GroupScreen(
           title: tcontext.NetConnectionsScreen.selectType,
           getOptions: getOptions,

@@ -61,7 +61,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:vpn_service/vpn_service.dart';
 
 class SettingsScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "SettingsScreen");
   }
 
@@ -187,13 +187,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
       if (!mounted) {
         return [];
       }
-      DialogUtils.showAlertDialog(
-        context,
-        "${err.toString()}\n${stacktrace.toString()}",
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
       return [];
     }
   }
@@ -374,7 +368,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        settings: LoginStepProviderScreen.routSettings(),
+                        settings: LoginStepProviderScreen.routeSettings(),
                         builder: (context) => const LoginStepProviderScreen(),
                       ),
                     );
@@ -505,7 +499,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      settings: TextToQrCodeScreen.routSettings(),
+                      settings: TextToQrCodeScreen.routeSettings(),
                       builder: (context) => const TextToQrCodeScreen(),
                     ),
                   );
@@ -521,7 +515,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                       context,
                       MaterialPageRoute(
                         settings:
-                            UWPLoopbackExemptionWindowsScreen.routSettings(),
+                            UWPLoopbackExemptionWindowsScreen.routeSettings(),
                         builder: (context) =>
                             const UWPLoopbackExemptionWindowsScreen(),
                       ),
@@ -544,7 +538,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      settings: UserAgentSettingsScreen.routSettings(),
+                      settings: UserAgentSettingsScreen.routeSettings(),
                       builder: (context) => const UserAgentSettingsScreen(),
                     ),
                   );
@@ -561,7 +555,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   await Navigator.push(
                     context,
                     MaterialPageRoute(
-                      settings: SpeedTestSettingsScreen.routSettings(),
+                      settings: SpeedTestSettingsScreen.routeSettings(),
                       builder: (context) => const SpeedTestSettingsScreen(),
                     ),
                   );
@@ -601,7 +595,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: MyProfilesScreen.routSettings(),
+                    settings: MyProfilesScreen.routeSettings(),
                     builder: (context) => const MyProfilesScreen(),
                   ),
                 );
@@ -909,7 +903,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        settings: ListAddScreen.routSettings(
+                        settings: ListAddScreen.routeSettings(
                           "systemProxyBypassDomain",
                         ),
                         builder: (context) => ListAddScreen(
@@ -1114,7 +1108,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: LanguageSettingsScreen.routSettings(),
+                    settings: LanguageSettingsScreen.routeSettings(),
                     builder: (context) => const LanguageSettingsScreen(
                       canPop: true,
                       canGoBack: true,
@@ -1285,7 +1279,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        settings: ListAddScreen.routSettings(
+                        settings: ListAddScreen.routeSettings(
                           "allowedSenderPackages",
                         ),
                         builder: (context) => ListAddScreen(
@@ -1300,7 +1294,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                               context,
                               MaterialPageRoute(
                                 settings:
-                                    PackageIdMultiSelectAndroidScreen.routSettings(),
+                                    PackageIdMultiSelectAndroidScreen.routeSettings(),
                                 builder: (context) =>
                                     PackageIdMultiSelectAndroidScreen(
                                       installedApps: [],
@@ -1417,7 +1411,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      settings: QrcodeScreen.routSettings(),
+                      settings: QrcodeScreen.routeSettings(),
                       builder: (context) =>
                           QrcodeScreen(content: remoteConfig.follow),
                     ),
@@ -1434,23 +1428,11 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      settings: QrcodeScreen.routSettings(),
+                      settings: QrcodeScreen.routeSettings(),
                       builder: (context) =>
                           QrcodeScreen(content: remoteConfig.telegram),
                     ),
                   );
-                },
-              ),
-            ),
-          ],
-          if (!Platform.isIOS &&
-              //!Platform.isMacOS &&
-              remoteConfig.donateUrl.isNotEmpty) ...[
-            GroupItemOptions(
-              pushOptions: GroupItemPushOptions(
-                name: tcontext.SettingsScreen.supportUs,
-                onPush: () async {
-                  onTapSupportUS();
                 },
               ),
             ),
@@ -1463,7 +1445,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                 await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    settings: AboutScreen.routSettings(),
+                    settings: AboutScreen.routeSettings(),
                     builder: (context) => const AboutScreen(),
                   ),
                 );
@@ -1514,7 +1496,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        settings: RichtextViewScreen.routSettings(),
+                        settings: RichtextViewScreen.routeSettings(),
                         builder: (context) => RichtextViewScreen(
                           title: item.title,
                           file: "",
@@ -1560,7 +1542,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          settings: RichtextViewScreen.routSettings(),
+                          settings: RichtextViewScreen.routeSettings(),
                           builder: (context) => RichtextViewScreen(
                             title: item.title,
                             file: "",
@@ -1583,7 +1565,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("notice"),
+        settings: GroupScreen.routeSettings("notice"),
         builder: (context) =>
             GroupScreen(title: tcontext.meta.notice, getOptions: getOptions),
       ),
@@ -1609,7 +1591,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            settings: VersionUpdateScreen.routSettings(),
+            settings: VersionUpdateScreen.routeSettings(),
             builder: (context) => const VersionUpdateScreen(),
           ),
         );
@@ -1654,7 +1636,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                   await Navigator.push(
                       context,
                       MaterialPageRoute(
-                          settings: CloudflareWarpAccountScreen.routSettings(),
+                          settings: CloudflareWarpAccountScreen.routeSettings(),
                           builder: (context) =>
                               const CloudflareWarpAccountScreen()));
                 })),*/
@@ -1666,11 +1648,11 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("WARP"),
+        settings: GroupScreen.routeSettings("WARP"),
         builder: (context) => GroupScreen(
           title: "WARP",
           getOptions: getOptions,
-          onDone: (BuildContext context) async {
+          onDone: (BuildContext context, SetStateCallback? setstate) async {
             if (!mounted) {
               return false;
             }
@@ -1709,7 +1691,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  settings: UrlTestSettingsScreen.routSettings(),
+                  settings: UrlTestSettingsScreen.routeSettings(),
                   builder: (context) => const UrlTestSettingsScreen(),
                 ),
               );
@@ -1773,7 +1755,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("latencyTest"),
+        settings: GroupScreen.routeSettings("latencyTest"),
         builder: (context) => GroupScreen(
           title: tcontext.meta.latencyTest,
           getOptions: getOptions,
@@ -2115,7 +2097,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("port"),
+        settings: GroupScreen.routeSettings("port"),
         builder: (context) =>
             GroupScreen(title: tcontext.meta.port, getOptions: getOptions),
       ),
@@ -2165,7 +2147,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("NTP"),
+        settings: GroupScreen.routeSettings("NTP"),
         builder: (context) => GroupScreen(title: "NTP", getOptions: getOptions),
       ),
     );
@@ -2327,7 +2309,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("TLS"),
+        settings: GroupScreen.routeSettings("TLS"),
         builder: (context) =>
             GroupScreen(title: tcontext.meta.tls, getOptions: getOptions),
       ),
@@ -2440,7 +2422,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
                     await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        settings: GroupScreen.routSettings("brutal"),
+                        settings: GroupScreen.routeSettings("brutal"),
                         builder: (context) => GroupScreen(
                           title: "brutal",
                           getOptions: (BuildContext context, SetStateCallback? setstate) async {
@@ -2560,7 +2542,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("Mux"),
+        settings: GroupScreen.routeSettings("Mux"),
         builder: (context) => GroupScreen(
           title: "Mux",
           getOptions: getOptions,
@@ -2770,7 +2752,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("autoSelect"),
+        settings: GroupScreen.routeSettings("autoSelect"),
         builder: (context) => GroupScreen(
           title: tcontext.SettingsScreen.autoSelect,
           getOptions: getOptions,
@@ -2848,7 +2830,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("homeScreen"),
+        settings: GroupScreen.routeSettings("homeScreen"),
         builder: (context) => GroupScreen(
           title: tcontext.SettingsScreen.homeScreen,
           getOptions: getOptions,
@@ -2927,7 +2909,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("backgroundImage"),
+        settings: GroupScreen.routeSettings("backgroundImage"),
         builder: (context) => GroupScreen(
           title: tcontext.SettingsScreen.backgroundImage,
           getOptions: getOptions,
@@ -2951,17 +2933,11 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
           SettingManager.getConfig().uiScreen.backgroundImageLocal = filePath;
           setState(() {});
         }
-      } catch (err, _) {
+      } catch (err, stacktrace) {
         if (!mounted) {
           return;
         }
-        DialogUtils.showAlertDialog(
-          context,
-          err.toString(),
-          showCopy: true,
-          showFAQ: true,
-          withVersion: true,
-        );
+        DialogUtils.showExceptionDialog(context, err, stacktrace);
       }
       return;
     }
@@ -2985,13 +2961,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
       if (!mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
     }
   }
 
@@ -3203,7 +3173,7 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        settings: GroupScreen.routSettings("handleScheme"),
+        settings: GroupScreen.routeSettings("handleScheme"),
         builder: (context) => GroupScreen(
           title: tcontext.SettingsScreen.handleScheme,
           getOptions: getOptions,
@@ -3265,59 +3235,10 @@ class _SettingScreenState extends LasyRenderingState<SettingsScreen> {
       if (!context.mounted) {
         return;
       }
-      DialogUtils.showAlertDialog(
-        context,
-        err.toString(),
-        showCopy: true,
-        showFAQ: true,
-        withVersion: true,
-      );
+      DialogUtils.showExceptionDialog(context, err, stacktrace);
       return;
     }
     await VPNService.uninit();
     await ServicesBinding.instance.exitApplication(AppExitType.required);
-  }
-
-  Future<void> onTapSupportUS() async {
-    final tcontext = Translations.of(context);
-
-    Future<List<GroupItem>> getOptions(
-      BuildContext context,
-      SetStateCallback? setstate,
-    ) async {
-      var remoteConfig = RemoteConfigManager.getConfig();
-      List<GroupItemOptions> options = [
-        GroupItemOptions(
-          pushOptions: GroupItemPushOptions(
-            name: tcontext.meta.donate,
-            onPush: () async {
-              String url = await UrlLauncherUtils.reorganizationUrlWithAnchor(
-                remoteConfig.donateUrl,
-              );
-              await WebviewHelper.loadUrl(
-                context,
-                url,
-                "donate",
-                title: tcontext.meta.donate,
-              );
-            },
-          ),
-        ),
-      ];
-
-      return [GroupItem(options: options)];
-    }
-
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        settings: GroupScreen.routSettings("supportUs"),
-        builder: (context) => GroupScreen(
-          title: tcontext.SettingsScreen.supportUs,
-          getOptions: getOptions,
-        ),
-      ),
-    );
-    setState(() {});
   }
 }

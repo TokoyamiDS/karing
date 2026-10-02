@@ -43,7 +43,7 @@ class DiversionGroupCustomEditOptions {
 }
 
 class DiversionGroupCustomEditScreen extends LasyRenderingStatefulWidget {
-  static RouteSettings routSettings() {
+  static RouteSettings routeSettings() {
     return const RouteSettings(name: "DiversionGroupCustomEditScreen");
   }
 
@@ -345,7 +345,7 @@ class _DiversionGroupCustomEditScreenState
             return await Navigator.push(
               context,
               MaterialPageRoute(
-                settings: MultiSelectScreen.routSettings(),
+                settings: MultiSelectScreen.routeSettings(),
                 builder: (context) => MultiSelectScreen(
                   title: 'Rule Set(build-in)',
                   getData: () async {
@@ -416,7 +416,7 @@ class _DiversionGroupCustomEditScreenState
               return await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  settings: PackageIdMultiSelectAndroidScreen.routSettings(),
+                  settings: PackageIdMultiSelectAndroidScreen.routeSettings(),
                   builder: (context) => PackageIdMultiSelectAndroidScreen(
                     installedApps: _installedApps,
                     selectedData: selectedData,
@@ -457,13 +457,7 @@ class _DiversionGroupCustomEditScreenState
                   if (!mounted) {
                     return null;
                   }
-                  DialogUtils.showAlertDialog(
-                    context,
-                    err.toString(),
-                    showCopy: true,
-                    showFAQ: true,
-                    withVersion: true,
-                  );
+                  DialogUtils.showExceptionDialog(context, err, stacktrace);
                 }
                 return null;
               },
@@ -506,13 +500,7 @@ class _DiversionGroupCustomEditScreenState
                   if (!mounted) {
                     return null;
                   }
-                  DialogUtils.showAlertDialog(
-                    context,
-                    err.toString(),
-                    showCopy: true,
-                    showFAQ: true,
-                    withVersion: true,
-                  );
+                  DialogUtils.showExceptionDialog(context, err, stacktrace);
                 }
                 return null;
               },
@@ -564,13 +552,7 @@ class _DiversionGroupCustomEditScreenState
                   if (!mounted) {
                     return null;
                   }
-                  DialogUtils.showAlertDialog(
-                    context,
-                    err.toString(),
-                    showCopy: true,
-                    showFAQ: true,
-                    withVersion: true,
-                  );
+                  DialogUtils.showExceptionDialog(context, err, stacktrace);
                 }
                 return null;
               },
@@ -593,13 +575,7 @@ class _DiversionGroupCustomEditScreenState
                   if (!mounted) {
                     return null;
                   }
-                  DialogUtils.showAlertDialog(
-                    context,
-                    err.toString(),
-                    showCopy: true,
-                    showFAQ: true,
-                    withVersion: true,
-                  );
+                  DialogUtils.showExceptionDialog(context, err, stacktrace);
                 }
                 return null;
               },
@@ -685,7 +661,7 @@ class _DiversionGroupCustomEditScreenState
             return await Navigator.push(
               context,
               MaterialPageRoute(
-                settings: MultiSelectScreen.routSettings(),
+                settings: MultiSelectScreen.routeSettings(),
                 builder: (context) => MultiSelectScreen(
                   title: 'Network Type',
                   getData: () async {
@@ -725,7 +701,7 @@ class _DiversionGroupCustomEditScreenState
             return await Navigator.push(
               context,
               MaterialPageRoute(
-                settings: MultiSelectScreen.routSettings(),
+                settings: MultiSelectScreen.routeSettings(),
                 builder: (context) => MultiSelectScreen(
                   title: 'Network',
                   getData: () async {
@@ -762,7 +738,7 @@ class _DiversionGroupCustomEditScreenState
               return await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  settings: MultiSelectScreen.routSettings(),
+                  settings: MultiSelectScreen.routeSettings(),
                   builder: (context) => MultiSelectScreen(
                     title: 'WIFI SSID',
                     getData: () async {
@@ -809,7 +785,7 @@ class _DiversionGroupCustomEditScreenState
               return await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  settings: MultiSelectScreen.routSettings(),
+                  settings: MultiSelectScreen.routeSettings(),
                   builder: (context) => MultiSelectScreen(
                     title: 'WIFI BSSID',
                     getData: () async {
@@ -881,7 +857,7 @@ class _DiversionGroupCustomEditScreenState
             return await Navigator.push(
               context,
               MaterialPageRoute(
-                settings: MultiSelectScreen.routSettings(),
+                settings: MultiSelectScreen.routeSettings(),
                 builder: (context) => MultiSelectScreen(
                   title: 'Protocol',
                   getData: () async {
