@@ -444,11 +444,17 @@ class AutoConfUtils {
           params['cs']!.split(':').where((c) => c.isNotEmpty).toList();
     }
     if (security == 'reality') {
-      tls['reality'] = {
-        'enabled': true,
-        'public_key': params['pbk'] ?? "",
-        'short_id': params['sid'] ?? "",
-      };
+      // Only emit reality when pbk is a usable key. sing-box refuses to start at
+      // all on "invalid public_key", so a node that advertises reality without a
+      // usable pbk must fall back to plain TLS instead of killing the config.
+      final pbk = params['pbk'] ?? '';
+      if (SingboxOutboundRealityOptions.isValidPublicKey(pbk)) {
+        tls['reality'] = {
+          'enabled': true,
+          'public_key': pbk,
+          'short_id': params['sid'] ?? "",
+        };
+      }
     }
     // sing-box requires ech.config to be a PEM ECHConfigList. Publishers sometimes put a
     // DNS URL in ech= (e.g. "ip.gs+udp://8.8.8.8"), and the core then refuses to start at

@@ -11,18 +11,15 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
-
 # IntelliJ related
 *.iml
 *.ipr
 *.iws
 .idea/
-
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
 #.vscode/
-
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
@@ -33,17 +30,13 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
-
 # Web related
 lib/generated_plugin_registrant.dart
 lib/generated/
-
 # Symbolication related
 app.*.symbols
-
 # Obfuscation related
 app.*.map.json
-
 # Android Studio will place build artifacts here
 /android/app/src/debug
 /android/app/src/profile
@@ -57,10 +50,6 @@ app.*.map.json
 /dist/*.xcarchive
 /dist/karing_*
 /dist/*+*
-/bind/apple/Libbox.xcframework
-/bind/android/core
-/bind/windows/core
-/bind/linux/core
 ios/karingWidget/VpnServiceHandler.swift
 /.idea/workspace.xml
 /lib/app/private
@@ -71,7 +60,6 @@ ios/karingWidget/VpnServiceHandler.swift
 /todo.txt
 /android/app/.cxx
 /android/.kotlin
-
 *.hprof
 /android/build
 CODEBASE_ANALYSIS.md
@@ -84,11 +72,28 @@ START_HERE_SINGBOX_SPLIT.md
 TECHNICAL_INVENTORY.md
 build_log.txt
 build_output.txt
-
 /setting.json
 /windows/sing-box.exe
-/bind/
-
+# --- bind/ : native dependencies ---
+# Most of bind/windows/ is ALREADY TRACKED (the mscrt/ucrt/icu runtime DLLs and
+# the debug DLLs, 51 files ~8 MB). gitignore does not untrack existing files, so
+# those stay committed regardless of the rules below - which is what the Windows
+# release build needs, since windows/CMakeLists.txt installs them into the bundle.
+#
+# bind/windows/core/sing-box.exe is a custom patched build (version metadata
+# stripped, endpoint patch applied) and CANNOT be replaced with a stock upstream
+# release, so it is committed too - CI needs it in the checkout.
+#
+# Only the large platform cores we do not build on Windows runners stay ignored.
+# NOTE: exclude '/bind/*' then re-include, NOT '/bind/'. Git cannot re-include a
+# file if a PARENT DIRECTORY is excluded, which makes every '!' rule dead.
+/bind/*
+!/bind/windows/
+/bind/windows/core/*.bak-before-endpoint
+/bind/windows/core/*.bak
+/bind/android/
+/bind/linux/
+/bind/apple/
 # --- build / session junk (not source) ---
 .flutter_tool_state
 cache.db
@@ -96,3 +101,16 @@ tags.txt
 .github/context-mode/sessions/
 *.bak-oom
 *.bak-before-endpoint
+notary_log.json
+
+# --- signing material: NEVER commit ---
+# Android release/debug keystores and their passwords. Losing control of the
+# release key means anyone can sign an APK that Android accepts as an official
+# update to this app, and Android signing keys cannot be revoked or rotated
+# once published. CI must read these from GitHub Secrets instead.
+android/key.properties
+android/sign/
+*.jks
+*.keystore
+*.p12
+*.pfx

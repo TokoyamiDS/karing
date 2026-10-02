@@ -1,0 +1,160 @@
+name: Build Android + Windows
+
+# Manual trigger plus tag pushes. Kept off `push` to main so an ordinary commit
+# does not burn two full builds; use the tag path for releases.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+# One build at a time per ref. A second push to a tag cancels the first, which
+# avoids two jobs racing to publish the same artifact names.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned deliberately. pubspec only requires ">=3.44.0", which would let CI
+  # drift onto a Flutter the project has never been built against.
+  FLUTTER_VERSION: '3.47.5'
+
+jobs:
+  android:
+    name: Android release APK (signed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # Gradle reads key.properties during CONFIGURATION, for every build type
+      # including debug: `Properties().apply { keystore.inputStream()... }` throws
+      # if the file is absent. So this must exist before any Gradle invocation,
+      # not merely before the signing step.
+      - name: Provide key.properties
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::error::Secret KEYSTORE_BASE64 is empty. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          mkdir -p android/sign
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/sign/karing.release.keystore
+          # Matches storeFile.release=sign/karing.release.keystore (relative to android/)
+          cat > android/key.properties <<EOF
+          storeFile.release=sign/karing.release.keystore
+          storePassword.release=${KEYSTORE_PASSWORD}
+          keyAlias.release=${KEY_ALIAS}
+          keyPassword.release=${KEY_PASSWORD}
+          EOF
+          echo "keystore bytes: $(stat -c%s android/sign/karing.release.keystore)"
+
+      # Verify the key is the one the build expects BEFORE spending 40 minutes
+      # building. A wrong alias or password otherwise surfaces as an opaque
+      # Gradle signing failure at the very end.
+      - name: Verify signing key
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          keytool -list -keystore android/sign/karing.release.keystore \
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS"
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Build signed release APK
+        run: flutter build apk --release
+
+      # Mirror pkg_android.bat's naming so CI artifacts match what a local
+      # release produces: karing_<version>_android_<abi>.apk. Version comes from
+      # pubspec.yaml, same source as flutter.versionName.
+      - name: Rename artifacts (upstream convention)
+        if: always()
+        run: |
+          set -euo pipefail
+          V=$(grep -m1 '^version:' pubspec.yaml | sed 's/version: *//;s/+.*//' | tr -d '\r')
+          echo "version=$V"
+          mkdir -p dist
+          src=build/app/outputs/flutter-apk
+          rename() {  # rename <source-file> <dest-name> [required]
+            if [ -f "$src/$1" ]; then
+              cp "$src/$1" "dist/$2"
+              echo "  $1 -> $2"
+            elif [ "${3:-}" = "required" ]; then
+              echo "::error::$1 not found - did the ABI splits change?"; exit 1
+            fi
+          }
+          # pkg_android.bat's three names. app-release.apk is the universal APK
+          # (splits { abi { isUniversalApk = true } }); the other two are per-ABI.
+          rename app-release.apk             "karing_${V}_android_arm.apk"          required
+          rename app-arm64-v8a-release.apk   "karing_${V}_android_arm64-v8a.apk"
+          rename app-armeabi-v7a-release.apk "karing_${V}_android_armeabi-v7a.apk"
+          echo "--- dist ---"
+          ls -la dist/
+
+      # Uploaded even if a later step fails, so a broken run still yields the
+      # artifact needed to diagnose it.
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: karing-android
+          path: |
+            dist/*.apk
+            build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows:
+    name: Windows release
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Build release
+        run: flutter build windows --release
+
+      # The Windows runner needs the bundled core next to the exe. On a local
+      # build this comes from bind/windows/core, which is gitignored, so the
+      # release bundle is uploaded as a whole to keep the layout intact.
+      - name: Upload Windows bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: karing-windows
+          path: build/windows/x64/runner/Release/**
+          if-no-files-found: warn
+          retention-days: 14

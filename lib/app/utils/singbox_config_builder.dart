@@ -37,8 +37,8 @@ const String kOutboundTagAutoSelect = "AutoSelect";
 const int kOutboundMaxCount = 100;
 
 class SingboxInboundTunOptions {
-  static const String ipv4Address = "172.19.0.1/30";
-  static const String ipv6Address = "fdfe:dcba:9876::1/126";
+  static String ipv4Address = "172.19.0.1/30";
+  static String ipv6Address = "fdfe:dcba:9876::1/126";
 
   String type = "tun";
   String tag = "tun-in";
@@ -290,6 +290,24 @@ class SingboxConfigBuilder {
           result['flow'] = flow;
         }
       }
+      // A node can advertise `security=reality` while shipping no `pbk`, or a
+      // malformed one. sing-box decodes public_key as unpadded URL-safe base64
+      // and refuses to start *any* outbound when that fails
+      // ("initialize outbound[N]: invalid public_key"), so a single bad node
+      // takes the whole config down. Drop the block instead: the node degrades
+      // to plain TLS and every other outbound keeps working.
+      //
+      // Done here as well as at parse time because this is the safety net for
+      // already-persisted data: the offending node is already sitting in the
+      // user's profile, and re-importing a subscription to repair one node is
+      // not something to ask of anyone.
+      final reality = result['reality'];
+      if (reality is Map) {
+        final publicKey = reality['public_key']?.toString() ?? '';
+        if (!SingboxOutboundRealityOptions.isValidPublicKey(publicKey)) {
+          result.remove('reality');
+        }
+      }
       // A share link that omits `host=` must send the SNI as the WebSocket Host.
       // That is what v2rayN/Xray do, and Cloudflare routes by Host, so without it
       // the upgrade is answered 403 and the node never connects.
@@ -488,6 +506,9 @@ class SingboxConfigBuilder {
           q['cs']!.split(':').where((c) => c.isNotEmpty).toList();
     }
     if (security == 'reality') {
+      // Dropped by SingboxOutboundRealityOptions.toJson() when public_key is not
+      // a usable key, so a node with a missing/malformed pbk degrades to plain
+      // TLS instead of aborting core startup with "invalid public_key".
       tls.reality = SingboxOutboundRealityOptions()
         ..enabled = true
         ..publicKey = q['pbk'] ?? ""

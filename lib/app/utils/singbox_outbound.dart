@@ -596,8 +596,22 @@ class SingboxOutboundRealityOptions {
   String publicKey = "";
   String shortId = "";
 
+  /// sing-box decodes `public_key` as *unpadded* URL-safe base64 and requires
+  /// exactly 32 bytes, so a usable key is 43 characters of [A-Za-z0-9_-].
+  /// Anything else — an empty string, the standard base64 alphabet, padding, or
+  /// a wrong length — makes the core fail with `invalid public_key` and refuse
+  /// to start, taking every other outbound down with it. Verified against the
+  /// bundled core with `sing-box check`.
+  static final RegExp _publicKeyRe = RegExp(r'^[A-Za-z0-9_-]{43}$');
+
+  static bool isValidPublicKey(String key) => _publicKeyRe.hasMatch(key);
+
   Map<String, dynamic> toJson() {
     if (!enabled) return {};
+    // Omit reality entirely when the key is unusable: publishing it with an
+    // empty public_key aborts core startup (see isValidPublicKey), whereas
+    // omitting it degrades the node to plain TLS and leaves the rest working.
+    if (!isValidPublicKey(publicKey)) return {};
     return {
       'enabled': true,
       'public_key': publicKey,
